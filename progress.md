@@ -1,6 +1,6 @@
 # Progress
 
-**Last updated:** 2026-07-17 by Murad, session 3
+**Last updated:** 2026-07-17 by Ahad, session 4
 **Current phase:** 1 — foundations
 **Days elapsed:** 1 / 21
 
@@ -24,19 +24,23 @@ app, Slack incoming webhook, Google Sheets via service account).
 | 12 | Re-import the exported JSON: still works | Murad | PASS | |
 
 ## Status
-Phase 0 CLOSED — all 12 checks passed (Ahad confirmed his 8; Murad's 4 were
-already done session 2). Phase 1 started, Murad's half done: `package.json`
-+ Vitest wired (`npm test` green, 3 tests), `test/fixtures/clean.json` (7
-charges / 6 deals, contract shape, one intentionally unmatched charge —
-David Reyes, `ch_007` — per PLAN.md's stated 7/6 split), `src/matcher.js`
-stub (correct `match(payments, deals, config)` signature, returns the
-empty four-bucket shape), and `build/inject.js` (generic
-`injectCode(workflow, mappings)` — reads a src file verbatim into a named
-Code node's `parameters.jsCode`). Proven against the real Phase 0 n8n
-export, preserved as `test/fixtures/n8n-code-node-export.json` (root copy
-`My workflow.json` deleted — throwaway, not in repo layout, content
-survives as this fixture). Ahad's Phase 1 half (schema.sql, .env.example,
-credentials in n8n's store) not started yet.
+Phase 0 CLOSED — all 12 checks passed. Phase 1 nearly closed. Murad's half done
+(session 3): `package.json` + Vitest (`npm test` green, 3 tests),
+`test/fixtures/clean.json` (7 charges / 6 deals, David Reyes `ch_007` deliberately
+unmatched), `src/matcher.js` stub (`match(payments, deals, config)` → empty
+four-bucket shape), `build/inject.js` (`injectCode(workflow, mappings)`, proven
+against the real Phase 0 export at `test/fixtures/n8n-code-node-export.json`).
+Ahad's half done (session 4): `db/schema.sql` (runs/exceptions/matches with the
+UNIQUE idempotency key + CHECK constraints on the 5 exception types), `.env.example`
+(all 4 creds documented), and `docs/CONTRACT.md` (the frozen data-shape agreement,
+transcribed from PLAN.md §2, matched to clean.json + matcher.js). `spike/` deleted.
+`npm test` still green (3/3).
+
+Three things remain to fully close Phase 1, all needing the live n8n environment
+(Docker is NOT installed on Ahad's machine — Murad has the container env): (a) load
+`db/schema.sql` into the running Postgres; (b) store the 4 API credentials in n8n's
+credential store via the UI; (c) both sign off on `docs/CONTRACT.md` (checkboxes
+still unchecked). Until those close, DO NOT start Phase 2 (seeder).
 
 ## Done
 - [x] docker-compose.yml written (n8n + Postgres)
@@ -50,7 +54,14 @@ credentials in n8n's store) not started yet.
 - [x] test/fixtures/clean.json — 7 charges, 6 deals, contract shape
 - [x] src/matcher.js — stub, correct signature, one passing test
 - [x] build/inject.js — proven against real n8n export, 2 passing tests
-- [ ] Ahad's Phase 1: docker-compose (done, uncommitted), db/schema.sql, .env.example, 4 credentials in n8n store
+- [x] docker-compose.yml committed (Murad; was Ahad's PLAN.md item)
+- [x] db/schema.sql — runs/exceptions/matches, UNIQUE idempotency key, type CHECKs
+- [x] .env.example — all 4 credentials documented
+- [x] docs/CONTRACT.md — written, transcribed from PLAN.md §2 (sign-off pending)
+- [x] spike/ deleted (Phase 0 throwaway)
+- [ ] Load db/schema.sql into running Postgres (needs Docker/n8n up)
+- [ ] 4 credentials stored in n8n credential store (manual UI, needs n8n up)
+- [ ] docs/CONTRACT.md signed off by BOTH (Phase 1 exit criterion)
 
 ## Session log
 ### Session 1 — 2026-07-17
@@ -88,24 +99,44 @@ credentials in n8n's store) not started yet.
   - `npm test` → 3/3 passing
 - Ahad's Phase 1 half (schema.sql, .env.example, credentials) not started
 
+### Session 4 — 2026-07-17 (Ahad)
+- Deleted throwaway `spike/` (Phase 0 closed and confirmed).
+- Wrote `db/schema.sql`: `runs` / `exceptions` / `matches` per PLAN.md §6, plus
+  CHECK constraints enforcing the 5 exception types and the `status` enum, and
+  indexes on run_id / resolved / email. Could NOT live-load it — Docker isn't
+  installed on Ahad's machine.
+- Wrote `.env.example`: Postgres (mirrors compose) + the 4 API creds, with a note
+  that the API creds go into n8n's credential store, not this file.
+- Wrote `docs/CONTRACT.md`: payment/deal input shapes, matcher output shape, the 5
+  exception types, contract rules, and a sign-off block (both boxes still unchecked).
+- Verified `npm test` green (3/3). Discarded an incidental `package-lock.json`
+  mutation from `npm install` (it pruned cross-platform optional deps) to keep
+  Murad's lockfile intact.
+- Committed + pushed (12fe273). Repo pushed to github.com/Ahadasim08/Reconciliation-Bot-n8n.
+
 ## Problems solved (never re-solve these)
 | Problem | Cause | Fix |
 |---|---|---|
+| `git push` → 403 "denied to ai-and-beyond" | Windows credential manager cached a different GitHub account | Push via gh's helper: `git -c credential.helper= -c credential.https://github.com.helper='!gh auth git-credential' push`. Long-term: clear the stale cred from Windows Credential Manager. |
+| `npm install` rewrites package-lock.json | npm prunes other-platform optional native deps on install | Don't commit that diff — `git checkout -- package-lock.json`. Lockfile stays cross-platform. |
 
 ## Blockers
 | Blocker | Owner | Since | Needs |
 |---|---|---|---|
+| Can't load schema / store n8n creds / run n8n locally | Ahad | S4 | Docker Desktop on Ahad's machine, OR do these on Murad's n8n instance |
+| CONTRACT.md not signed off | Both | S4 | Murad reads it, confirms downstream consumes these exact shapes |
 
 ## Next session — start here
-1. Delete `test-workflow.json` / `spike/` (throwaway, not in repo layout) if
-   not already gone.
-2. Ahad: Phase 1 half — `db/schema.sql` (runs/exceptions/matches tables per
-   PLAN.md section 6), `.env.example`, all 4 credentials stored in n8n
-   (never in repo). Commit `docker-compose.yml` (currently untracked).
-3. Both: write `docs/CONTRACT.md` from PLAN.md section 2, sign off — this
-   is a Phase 1 exit criterion and CLAUDE.md step 3 expects it to exist.
-4. Do NOT start Phase 2 (seeder) or Phase 3 (real matcher logic) until
-   Phase 1 fully closes — one phase per session, and Ahad's half is still open.
+1. Finish closing Phase 1 (needs live n8n — Murad's box or install Docker on Ahad's):
+   - Load `db/schema.sql` into the running Postgres.
+   - Store the 4 API credentials (Stripe / HubSpot / Slack / Sheets) in n8n's
+     credential store via the UI. Never in the repo.
+   - Murad reviews `docs/CONTRACT.md` and both check the sign-off boxes. This is
+     the Phase 1 exit criterion.
+2. Minor: reconcile the package.json (0.1.0) vs package-lock.json (1.0.0) version
+   mismatch (Murad's files).
+3. ONLY after all of the above: begin Phase 2 (seeder — Ahad) / Phase 3 (matcher —
+   Murad). One phase per session. Do NOT start Phase 2 while Phase 1 sign-off is open.
 
 ## Ideas parked (NOT doing, do not start)
 - Web dashboard — README extensions only
@@ -115,3 +146,6 @@ credentials in n8n's store) not started yet.
 ## Decisions log
 | Date | Decision | Reason |
 |---|---|---|
+| 2026-07-17 | Keep HubSpot as the CRM | Phase 0 checks 5 & 6 passed — free tier filters deals by date server-side and the contact→deal email join works. No need for the Pipedrive fallback (PLAN.md §8). |
+| 2026-07-17 | API creds live in n8n's credential store, not `.env` | `.env.example` is the operator checklist; secrets never touch the repo. |
+| 2026-07-17 | schema.sql adds CHECK constraints on exception_type/status | Enforces the documented enums at the DB layer without changing the PLAN.md §6 column shape. |
