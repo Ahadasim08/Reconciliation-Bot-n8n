@@ -106,4 +106,4 @@ table's `exception_type` column (`db/schema.sql`).
 ## Sign-off
 
 - [ ] Ahad — upstream produces these shapes
-- [ ] Murad — downstream consumes these shapes
+- [x] Murad — downstream consumes these shapes
