@@ -1,0 +1,156 @@
+{
+  "payments": [
+    {
+      "source": "stripe",
+      "id": "ch_001",
+      "email": "sarah.chen@acme.com",
+      "name": "Sarah Chen",
+      "amount": 2000.00,
+      "currency": "usd",
+      "timestamp": "2026-01-14T10:14:32.000Z",
+      "refunded": false,
+      "refundedAmount": 0.00,
+      "url": "https://dashboard.stripe.com/test/payments/ch_001"
+    },
+    {
+      "source": "stripe",
+      "id": "ch_002",
+      "email": "james.okafor@brightline.com",
+      "name": "James Okafor",
+      "amount": 750.00,
+      "currency": "usd",
+      "timestamp": "2026-01-14T12:02:11.000Z",
+      "refunded": false,
+      "refundedAmount": 0.00,
+      "url": "https://dashboard.stripe.com/test/payments/ch_002"
+    },
+    {
+      "source": "stripe",
+      "id": "ch_003",
+      "email": "priya.nair@northwind.io",
+      "name": "Priya Nair",
+      "amount": 1200.00,
+      "currency": "usd",
+      "timestamp": "2026-01-14T14:45:00.000Z",
+      "refunded": false,
+      "refundedAmount": 0.00,
+      "url": "https://dashboard.stripe.com/test/payments/ch_003"
+    },
+    {
+      "source": "stripe",
+      "id": "ch_004",
+      "email": "tom.baxter@fielder.co",
+      "name": "Tom Baxter",
+      "amount": 3400.00,
+      "currency": "usd",
+      "timestamp": "2026-01-14T16:30:45.000Z",
+      "refunded": false,
+      "refundedAmount": 0.00,
+      "url": "https://dashboard.stripe.com/test/payments/ch_004"
+    },
+    {
+      "source": "stripe",
+      "id": "ch_005",
+      "email": "elena.petrova@vantek.com",
+      "name": "Elena Petrova",
+      "amount": 500.00,
+      "currency": "usd",
+      "timestamp": "2026-01-14T18:05:22.000Z",
+      "refunded": false,
+      "refundedAmount": 0.00,
+      "url": "https://dashboard.stripe.com/test/payments/ch_005"
+    },
+    {
+      "source": "stripe",
+      "id": "ch_006",
+      "email": "yusuf.demir@harborlane.com",
+      "name": "Yusuf Demir",
+      "amount": 4950.00,
+      "currency": "usd",
+      "timestamp": "2026-01-14T20:11:09.000Z",
+      "refunded": false,
+      "refundedAmount": 0.00,
+      "url": "https://dashboard.stripe.com/test/payments/ch_006"
+    },
+    {
+      "source": "stripe",
+      "id": "ch_007",
+      "email": "david.reyes@omnicrest.com",
+      "name": "David Reyes",
+      "amount": 3000.00,
+      "currency": "usd",
+      "timestamp": "2026-01-14T21:50:00.000Z",
+      "refunded": false,
+      "refundedAmount": 0.00,
+      "url": "https://dashboard.stripe.com/test/payments/ch_007"
+    }
+  ],
+  "deals": [
+    {
+      "source": "hubspot",
+      "id": "8801",
+      "email": "sarah.chen@acme.com",
+      "name": "Sarah Chen",
+      "amount": 2000.00,
+      "currency": "usd",
+      "timestamp": "2026-01-14T00:00:00.000Z",
+      "stage": "closedwon",
+      "url": "https://app.hubspot.com/contacts/12345/deal/8801"
+    },
+    {
+      "source": "hubspot",
+      "id": "8802",
+      "email": "james.okafor@brightline.com",
+      "name": "James Okafor",
+      "amount": 750.00,
+      "currency": "usd",
+      "timestamp": "2026-01-14T00:00:00.000Z",
+      "stage": "closedwon",
+      "url": "https://app.hubspot.com/contacts/12346/deal/8802"
+    },
+    {
+      "source": "hubspot",
+      "id": "8803",
+      "email": "priya.nair@northwind.io",
+      "name": "Priya Nair",
+      "amount": 1200.00,
+      "currency": "usd",
+      "timestamp": "2026-01-14T00:00:00.000Z",
+      "stage": "closedwon",
+      "url": "https://app.hubspot.com/contacts/12347/deal/8803"
+    },
+    {
+      "source": "hubspot",
+      "id": "8804",
+      "email": "tom.baxter@fielder.co",
+      "name": "Tom Baxter",
+      "amount": 3400.00,
+      "currency": "usd",
+      "timestamp": "2026-01-14T00:00:00.000Z",
+      "stage": "closedwon",
+      "url": "https://app.hubspot.com/contacts/12348/deal/8804"
+    },
+    {
+      "source": "hubspot",
+      "id": "8805",
+      "email": "elena.petrova@vantek.com",
+      "name": "Elena Petrova",
+      "amount": 500.00,
+      "currency": "usd",
+      "timestamp": "2026-01-14T00:00:00.000Z",
+      "stage": "closedwon",
+      "url": "https://app.hubspot.com/contacts/12349/deal/8805"
+    },
+    {
+      "source": "hubspot",
+      "id": "8806",
+      "email": "yusuf.demir@harborlane.com",
+      "name": "Yusuf Demir",
+      "amount": 4950.00,
+      "currency": "usd",
+      "timestamp": "2026-01-14T00:00:00.000Z",
+      "stage": "closedwon",
+      "url": "https://app.hubspot.com/contacts/12350/deal/8806"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "name": "reconciliation-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Nightly n8n workflow reconciling Stripe payments against CRM deals.",
+  "scripts": {
+    "test": "vitest run",
+    "build": "node build/inject.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ahadasim08/Reconciliation-Bot-n8n.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/Ahadasim08/Reconciliation-Bot-n8n/issues"
+  },
+  "homepage": "https://github.com/Ahadasim08/Reconciliation-Bot-n8n#readme",
+  "devDependencies": {
+    "vitest": "^4.1.10"
+  }
+}

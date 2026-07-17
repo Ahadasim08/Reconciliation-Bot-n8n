@@ -1,22 +1,8 @@
 # Progress
 
-**Last updated:** 2026-07-17 by Murad, session 2
-**Current phase:** 0 — spike
+**Last updated:** 2026-07-17 by Murad, session 3
+**Current phase:** 1 — foundations
 **Days elapsed:** 1 / 21
-
-## Status
-Phase 0 CLOSED — all 12 checks pass. Ahad's 8 upstream checks pass, including
-the two make-or-break ones (HubSpot filters deals by date server-side, and the
-contact↔deal email join works). HubSpot stays; no CRM switch needed. Murad's 4
-downstream checks pass too: `docker-compose.yml` up, n8n reachable at
-localhost:5678, postgres healthy, Code node ran `{hello:"world"}`, exported to
-`test-workflow.json` (confirmed Code node JS is a plain string in the JSON —
-the fact the build step depends on), re-imported into n8n and confirmed it
-still runs. Spike code lives in `spike/` (uncommitted, throwaway) and gets
-deleted now that both halves are proven.
-
-## Done
-- [x] Phase 0 — spike (12/12 — all checks pass)
 
 ## Phase 0 — 12-check results
 Ahad ran the upstream checks 2026-07-17 (Stripe test mode, HubSpot free tier private
@@ -37,6 +23,35 @@ app, Slack incoming webhook, Google Sheets via service account).
 | 11 | Export workflow JSON: Code node JS is a string | Murad | PASS | build step depends on this |
 | 12 | Re-import the exported JSON: still works | Murad | PASS | |
 
+## Status
+Phase 0 CLOSED — all 12 checks passed (Ahad confirmed his 8; Murad's 4 were
+already done session 2). Phase 1 started, Murad's half done: `package.json`
++ Vitest wired (`npm test` green, 3 tests), `test/fixtures/clean.json` (7
+charges / 6 deals, contract shape, one intentionally unmatched charge —
+David Reyes, `ch_007` — per PLAN.md's stated 7/6 split), `src/matcher.js`
+stub (correct `match(payments, deals, config)` signature, returns the
+empty four-bucket shape), and `build/inject.js` (generic
+`injectCode(workflow, mappings)` — reads a src file verbatim into a named
+Code node's `parameters.jsCode`). Proven against the real Phase 0 n8n
+export, preserved as `test/fixtures/n8n-code-node-export.json` (root copy
+`My workflow.json` deleted — throwaway, not in repo layout, content
+survives as this fixture). Ahad's Phase 1 half (schema.sql, .env.example,
+credentials in n8n's store) not started yet.
+
+## Done
+- [x] docker-compose.yml written (n8n + Postgres)
+- [x] Phase 0 checks 1-8 (Ahad — Stripe, CRM, Slack, Sheets) — all passed
+- [x] Phase 0 check 9 — `docker compose up` → n8n loads at localhost:5678
+- [x] Phase 0 check 10 — Code node `return [{json:{hello:"world"}}]` executes
+- [x] Phase 0 check 11 — export workflow JSON, confirm Code node JS is a string
+- [x] Phase 0 check 12 — re-import JSON, confirm it works
+- [x] Phase 0 — ALL 12 CHECKS PASSED, phase closed
+- [x] package.json + Vitest — `npm test` passes (3/3)
+- [x] test/fixtures/clean.json — 7 charges, 6 deals, contract shape
+- [x] src/matcher.js — stub, correct signature, one passing test
+- [x] build/inject.js — proven against real n8n export, 2 passing tests
+- [ ] Ahad's Phase 1: docker-compose (done, uncommitted), db/schema.sql, .env.example, 4 credentials in n8n store
+
 ## Session log
 ### Session 1 — 2026-07-17
 - Wrote `docker-compose.yml`: n8n + Postgres 16-alpine, healthcheck-gated
@@ -56,6 +71,23 @@ app, Slack incoming webhook, Google Sheets via service account).
   (see PLAN.md section 4) — delete before Phase 1, or leave until Ahad's
   checks confirm the pattern once more
 
+### Session 3 — 2026-07-17
+- Ahad confirmed all 8 spike checks passed → Phase 0 closed, all 12 green
+- Started Phase 1 (Murad's half):
+  - `npm init`, added Vitest, `npm test` script
+  - `test/fixtures/clean.json`: 7 charges / 6 deals, contract shape,
+    hand-written (David Reyes charge deliberately has no matching deal,
+    per the 7/6 split PLAN.md calls for)
+  - `src/matcher.js`: stub with the real signature
+    `match(payments, deals, config)`, returns
+    `{matched:[], review:[], unmatchedPayments:[], unmatchedDeals:[]}`
+  - `build/inject.js`: `injectCode(workflow, mappings)` reads a src file's
+    text into a named node's `parameters.jsCode`. Proved against the real
+    Phase 0 export (re-exported by Murad as `My workflow.json`, copied into
+    `test/fixtures/n8n-code-node-export.json`, root copy deleted after)
+  - `npm test` → 3/3 passing
+- Ahad's Phase 1 half (schema.sql, .env.example, credentials) not started
+
 ## Problems solved (never re-solve these)
 | Problem | Cause | Fix |
 |---|---|---|
@@ -65,12 +97,15 @@ app, Slack incoming webhook, Google Sheets via service account).
 |---|---|---|---|
 
 ## Next session — start here
-1. Phase 0 closed (12/12). Delete `test-workflow.json` / `spike/` (throwaway,
-   not in repo layout), bump "Current phase" to 1.
-2. Start Phase 1 (Murad's side): `package.json` + Vitest setup,
-   `test/fixtures/clean.json` (7 charges / 6 deals worked example, contract shape),
-   `src/matcher.js` stub (correct signature, returns empty, one passing test),
-   `build/inject.js` proven against the Phase 0 exported workflow.
+1. Delete `test-workflow.json` / `spike/` (throwaway, not in repo layout) if
+   not already gone.
+2. Ahad: Phase 1 half — `db/schema.sql` (runs/exceptions/matches tables per
+   PLAN.md section 6), `.env.example`, all 4 credentials stored in n8n
+   (never in repo). Commit `docker-compose.yml` (currently untracked).
+3. Both: write `docs/CONTRACT.md` from PLAN.md section 2, sign off — this
+   is a Phase 1 exit criterion and CLAUDE.md step 3 expects it to exist.
+4. Do NOT start Phase 2 (seeder) or Phase 3 (real matcher logic) until
+   Phase 1 fully closes — one phase per session, and Ahad's half is still open.
 
 ## Ideas parked (NOT doing, do not start)
 - Web dashboard — README extensions only
