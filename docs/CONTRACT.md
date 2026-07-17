@@ -1,0 +1,109 @@
+# The Contract
+
+**This is the seam between the two halves. It is frozen.** Ahad's half (upstream:
+Stripe + CRM → normalized shape) produces exactly these shapes. Murad's half
+(downstream: matcher → classify → format) consumes exactly these shapes. Neither
+side ever sees the other's internals.
+
+Changing anything here is **a conversation, not a commit.** Both people update, both
+test, same day. (Source of truth: PLAN.md section 2.)
+
+---
+
+## Input shapes (Ahad produces, Murad consumes)
+
+### A normalized payment (from Stripe)
+
+```js
+{
+  source: "stripe",
+  id: "ch_3Ox1a2B...",                    // native ID, for the link back
+  email: "sarah.chen@acme.com",           // ALREADY lowercased, plus-tag stripped
+  name: "Sarah Chen",                     // may be null
+  amount: 2000.00,                        // DOLLARS as a number, never cents, never string
+  currency: "usd",
+  timestamp: "2026-01-14T10:14:32.000Z",  // ALWAYS UTC ISO8601
+  refunded: false,
+  refundedAmount: 0.00,
+  url: "https://dashboard.stripe.com/test/payments/ch_3Ox1a2B..."
+}
+```
+
+### A normalized deal (from the CRM — ANY CRM)
+
+```js
+{
+  source: "hubspot",                      // or "gohighlevel", "pipedrive", etc.
+  id: "8801",
+  email: "sarah.chen@acme.com",           // ALREADY normalized, same rules
+  name: "Sarah Chen",
+  amount: 2000.00,
+  currency: "usd",
+  timestamp: "2026-01-14T00:00:00.000Z",  // close date, UTC
+  stage: "closedwon",
+  url: "https://app.hubspot.com/contacts/12345/deal/8801"
+}
+```
+
+The canonical example of both shapes lives in `test/fixtures/clean.json`
+(7 payments / 6 deals).
+
+---
+
+## Output shape (Murad's matcher produces)
+
+`src/matcher.js` is a pure function: `match(payments, deals, config)`.
+
+```js
+match(payments, deals, config) -> {
+  matched:           [{ payment, deal, confidence, reasons }],
+  review:            [{ payment, deal, confidence, reasons }],
+  unmatchedPayments: [payment],
+  unmatchedDeals:    [deal]
+}
+```
+
+- `confidence` — integer score (see PLAN.md section 6 scoring).
+- `reasons` — array explaining the score (e.g. `["email exact", "amount exact"]`).
+- The matcher's job is **pairing only.** Naming what's left over is `classify.js`'s
+  job, not the matcher's.
+
+---
+
+## Exception types (classify.js produces)
+
+| Type | Meaning |
+|---|---|
+| `PAYMENT_NO_DEAL` | Money arrived, no CRM record |
+| `DEAL_NO_PAYMENT` | Deal marked won, no money |
+| `AMOUNT_MISMATCH` | Deal and charge amounts differ beyond tolerance |
+| `DUPLICATE_CHARGE` | Same customer, same amount, short window |
+| `ORPHAN_REFUND` | Refunded, deal still shows won |
+
+Plus a sixth non-exception state: `REVIEW` — matched, confidence 60–84, a human
+confirms. These five strings are the only allowed values in the `exceptions`
+table's `exception_type` column (`db/schema.sql`).
+
+---
+
+## Contract rules — no exceptions
+
+- **Money is always a number in dollars.** Stripe gives cents, HubSpot gives a
+  string. Both convert before crossing this line. `2000.00`, never `200000`,
+  never `"2000"`.
+- **Emails are always lowercased and plus-tag-stripped before crossing this line.**
+  The matcher never sees `Sarah.Chen@ACME.com`. Dots are **not** stripped
+  (deliberate — see DECISIONS.md).
+- **Timestamps are always UTC ISO8601.** No local time, no epoch, no date-only.
+- **`url` is always populated.** It's what makes the Sheet clickable.
+- **Missing data is `null`**, never `""`, never `0`, never `undefined`.
+- **The matcher must not know which CRM the deal came from.** If `matcher.js`,
+  `classify.js`, or `format.js` contains the string "hubspot" / "stripe" / any
+  vendor name, the seam is broken.
+
+---
+
+## Sign-off
+
+- [ ] Ahad — upstream produces these shapes
+- [ ] Murad — downstream consumes these shapes
