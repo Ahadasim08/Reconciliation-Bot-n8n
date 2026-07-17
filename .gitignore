@@ -2,8 +2,15 @@ node_modules/
 npm-debug.log*
 .env
 .env.*
+!.env.example
 .DS_Store
 *.log
 coverage/
 dist/
 .vscode/
+
+# python / spike
+__pycache__/
+*.pyc
+service-account.json
+**/service-account.json
