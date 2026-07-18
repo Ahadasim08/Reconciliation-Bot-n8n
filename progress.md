@@ -63,6 +63,7 @@ and Phase 3 — the matcher (Murad, downstream). One phase per session.
 - [x] Load db/schema.sql into running Postgres (done S5, persists in volume)
 - [x] 4 credentials stored in n8n credential store (done S5, manual UI)
 - [x] docs/CONTRACT.md signed off by BOTH (done S5 — Murad reviewed, both boxes checked)
+- [x] package.json/package-lock.json version mismatch fixed (S5, bb8d3ba)
 
 ## Session log
 ### Session 1 — 2026-07-17
@@ -115,24 +116,35 @@ and Phase 3 — the matcher (Murad, downstream). One phase per session.
   Murad's lockfile intact.
 - Committed + pushed (12fe273). Repo pushed to github.com/Ahadasim08/Reconciliation-Bot-n8n.
 
-### Session 5 — 2026-07-18 (Ahad)
-- Installed Docker Desktop on Ahad's machine — the blocker from S4. Brought the
-  stack up (n8n + Postgres at :5678), loaded `db/schema.sql` into the running
-  Postgres (runs/exceptions/matches tables created, persist in `postgres_data`).
-- Stored all 4 API credentials via the n8n UI: Stripe (`sk_test_`), HubSpot
-  (`pat-`), Google Sheets (service-account JSON). Slack is an incoming-webhook URL,
-  saved for the HTTP node in Phase 4/5 — not a stored credential type.
-- HubSpot detour: private apps were moved into the "Legacy Apps" area of the new
-  developer platform. Old Phase 0 app was gone; created a fresh one with scopes
-  `crm.objects.deals.read` + `crm.objects.contacts.read`, copied the `pat-` token.
+### Session 5 — 2026-07-18 (Ahad + Murad, concurrent)
+- Ahad: installed Docker Desktop on his machine — the blocker from S4. Brought
+  the stack up (n8n + Postgres at :5678), loaded `db/schema.sql` into the
+  running Postgres (runs/exceptions/matches tables created, persist in
+  `postgres_data`).
+- Ahad: stored all 4 API credentials via the n8n UI: Stripe (`sk_test_`),
+  HubSpot (`pat-`), Google Sheets (service-account JSON). Slack is an
+  incoming-webhook URL, saved for the HTTP node in Phase 4/5 — not a stored
+  credential type.
+- Ahad: HubSpot detour — private apps were moved into the "Legacy Apps" area
+  of the new developer platform. Old Phase 0 app was gone; created a fresh
+  one with scopes `crm.objects.deals.read` + `crm.objects.contacts.read`,
+  copied the `pat-` token.
 - Murad reviewed `docs/CONTRACT.md`; both sign-off boxes checked. Fixed an
   accidental broken-line edit (`clean.jso` → `clean.json`). **Phase 1 CLOSED.**
-- Caught + reverted real API keys accidentally pasted into `.env.example` (a
-  git-TRACKED file) before any commit — see Problems solved. No exposure.
-- On push, Murad had concurrently pushed his own sign-off (`de1b0e5`) plus a
-  package-lock version fix (`bb8d3ba`, resolving the parked 0.1.0/1.0.0 mismatch).
-  Rebased Ahad's close-out on top; resolved the CONTRACT sign-off conflict to both
-  boxes checked.
+- Ahad: caught + reverted real API keys accidentally pasted into
+  `.env.example` (a git-TRACKED file) before any commit — see Problems
+  solved. No exposure.
+- Murad (independently, on his own already-running containers): loaded
+  `db/schema.sql` into his instance too (`runs`/`exceptions`/`matches`
+  confirmed via `\dt` — harmless, `CREATE TABLE IF NOT EXISTS`), and fixed
+  the package.json (0.1.0) vs package-lock.json (1.0.0) version mismatch by
+  hand-editing the lock's two version fields (avoids the known
+  optional-deps-prune problem from `npm install`). `npm test` stayed green
+  (3/3). Committed `bb8d3ba`.
+- Both pushed concurrently — Ahad's close-out (`5933f59`) and Murad's
+  (`bb8d3ba` + `a852ca9`) diverged on `progress.md`. Rebased Murad's on top
+  of Ahad's; resolved in favor of Ahad's fuller close-out, folding in the
+  package-lock fix.
 
 ## Problems solved (never re-solve these)
 | Problem | Cause | Fix |
@@ -140,6 +152,7 @@ and Phase 3 — the matcher (Murad, downstream). One phase per session.
 | `git push` → 403 "denied to ai-and-beyond" | Windows credential manager cached a different GitHub account | Push via gh's helper: `git -c credential.helper= -c credential.https://github.com.helper='!gh auth git-credential' push`. Long-term: clear the stale cred from Windows Credential Manager. |
 | `npm install` rewrites package-lock.json | npm prunes other-platform optional native deps on install | Don't commit that diff — `git checkout -- package-lock.json`. Lockfile stays cross-platform. |
 | Real API keys pasted into `.env.example` | `.env.example` is git-TRACKED (`.gitignore` allows it via `!.env.example`) — it's the placeholder template, not a secret file | `git checkout -- .env.example` to restore `xxx` placeholders BEFORE commit. Real keys live only in n8n's credential store. Caught pre-commit S5, never pushed, no rotation needed. If the editor tab still holds them, close without saving. |
+| package.json (0.1.0) vs package-lock.json (1.0.0) mismatch | lock still had the `npm init` default version, never updated when package.json was set to 0.1.0 | Hand-edited both `version` fields in package-lock.json to 0.1.0 (not `npm install`, to avoid the optional-deps prune above). Commit bb8d3ba. |
 
 ## Blockers
 None. (S4 blockers resolved S5: Docker installed → schema + creds done; CONTRACT
