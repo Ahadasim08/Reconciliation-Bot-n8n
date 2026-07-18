@@ -1,118 +1,135 @@
-const DEFAULT_CONFIG = {
-  feeTolerance: 0.035,
-  amountTenPercentTolerance: 0.10,
-  nameFuzzyThreshold: 0.85,
-  autoMatchThreshold: 85,
-  reviewThreshold: 60,
-  timestamp24hMs: 24 * 60 * 60 * 1000,
-  timestamp48hMs: 48 * 60 * 60 * 1000,
+// THE BRAIN. Pure function. No I/O, no API calls, no console.log, no date-of-today.
+// Sees only the contract shape (docs/CONTRACT.md) — never a vendor name.
+
+export const DEFAULT_CONFIG = {
   scoreEmailExact: 50,
   scoreNameFuzzy: 20,
+  nameFuzzyThreshold: 0.85,
   scoreAmountExact: 40,
   scoreAmountFeeTolerance: 25,
+  feeTolerance: 0.035, // 3.5%
   scoreAmountTenPercent: 10,
+  amountTolerancePercent: 0.10,
   scoreTimestamp24h: 10,
   scoreTimestamp48h: 5,
+  autoMatchThreshold: 85,
+  reviewThreshold: 60,
 };
 
 function levenshtein(a, b) {
-  const rows = a.length + 1;
-  const cols = b.length + 1;
-  const d = Array.from({ length: rows }, (_, i) => [i, ...Array(cols - 1).fill(0)]);
-  for (let j = 0; j < cols; j++) d[0][j] = j;
-  for (let i = 1; i < rows; i++) {
-    for (let j = 1; j < cols; j++) {
+  const m = a.length;
+  const n = b.length;
+  const dp = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
     }
   }
-  return d[rows - 1][cols - 1];
+  return dp[m][n];
 }
 
-function nameSimilarity(nameA, nameB) {
-  const a = nameA.trim().toLowerCase();
-  const b = nameB.trim().toLowerCase();
-  const maxLen = Math.max(a.length, b.length);
+function nameSimilarity(a, b) {
+  if (!a || !b) return 0;
+  const x = a.trim().toLowerCase();
+  const y = b.trim().toLowerCase();
+  if (!x || !y) return 0;
+  const maxLen = Math.max(x.length, y.length);
   if (maxLen === 0) return 0;
-  return 1 - levenshtein(a, b) / maxLen;
+  return 1 - levenshtein(x, y) / maxLen;
+}
+
+function toCents(amount) {
+  return Math.round(amount * 100);
+}
+
+function scoreAmount(payment, deal, config) {
+  if (payment.amount == null || deal.amount == null) {
+    return { points: 0, reason: null };
+  }
+  if (toCents(payment.amount) === toCents(deal.amount)) {
+    return { points: config.scoreAmountExact, reason: "amount exact" };
+  }
+  const base = deal.amount || payment.amount || 1;
+  const pct = Math.abs(payment.amount - deal.amount) / base;
+  if (pct <= config.feeTolerance) {
+    return { points: config.scoreAmountFeeTolerance, reason: "amount within fee tolerance" };
+  }
+  if (pct <= config.amountTolerancePercent) {
+    return { points: config.scoreAmountTenPercent, reason: "amount within 10%" };
+  }
+  return { points: 0, reason: null };
+}
+
+function scoreTimestamp(payment, deal, config) {
+  if (!payment.timestamp || !deal.timestamp) return { points: 0, reason: null };
+  const hours = Math.abs(new Date(payment.timestamp) - new Date(deal.timestamp)) / 3_600_000;
+  if (hours <= 24) return { points: config.scoreTimestamp24h, reason: "timestamp within 24h" };
+  if (hours <= 48) return { points: config.scoreTimestamp48h, reason: "timestamp within 48h" };
+  return { points: 0, reason: null };
 }
 
 function scorePair(payment, deal, config) {
+  let points = 0;
   const reasons = [];
-  let score = 0;
-  let isCandidate = false;
 
-  if (payment.email && deal.email && payment.email === deal.email) {
-    isCandidate = true;
-    score += config.scoreEmailExact;
-    reasons.push('email_exact');
-  } else if (!payment.email && !deal.email && payment.name && deal.name) {
-    if (nameSimilarity(payment.name, deal.name) > config.nameFuzzyThreshold) {
-      isCandidate = true;
-      score += config.scoreNameFuzzy;
-      reasons.push('name_fuzzy');
+  const emailMatch = payment.email && deal.email && payment.email === deal.email;
+  if (emailMatch) {
+    points += config.scoreEmailExact;
+    reasons.push("email exact");
+  } else if (!payment.email && !deal.email) {
+    const similarity = nameSimilarity(payment.name, deal.name);
+    if (similarity > config.nameFuzzyThreshold) {
+      points += config.scoreNameFuzzy;
+      reasons.push("name fuzzy");
     }
   }
 
-  if (!isCandidate) return null;
+  const amountScore = scoreAmount(payment, deal, config);
+  points += amountScore.points;
+  if (amountScore.reason) reasons.push(amountScore.reason);
 
-  if (payment.amount != null && deal.amount != null) {
-    const paymentCents = Math.round(payment.amount * 100);
-    const dealCents = Math.round(deal.amount * 100);
-    const diffRatio = dealCents === 0 ? 0 : Math.abs(paymentCents - dealCents) / dealCents;
-    if (paymentCents === dealCents) {
-      score += config.scoreAmountExact;
-      reasons.push('amount_exact');
-    } else if (diffRatio <= config.feeTolerance) {
-      score += config.scoreAmountFeeTolerance;
-      reasons.push('amount_fee_adjusted');
-    } else if (diffRatio <= config.amountTenPercentTolerance) {
-      score += config.scoreAmountTenPercent;
-      reasons.push('amount_within_10pct');
-    }
-  }
+  const timeScore = scoreTimestamp(payment, deal, config);
+  points += timeScore.points;
+  if (timeScore.reason) reasons.push(timeScore.reason);
 
-  if (payment.timestamp && deal.timestamp) {
-    const diffMs = Math.abs(new Date(payment.timestamp).getTime() - new Date(deal.timestamp).getTime());
-    if (diffMs <= config.timestamp24hMs) {
-      score += config.scoreTimestamp24h;
-      reasons.push('timestamp_within_24h');
-    } else if (diffMs <= config.timestamp48hMs) {
-      score += config.scoreTimestamp48h;
-      reasons.push('timestamp_within_48h');
-    }
-  }
-
-  return { score, reasons };
+  return { points, reasons };
 }
 
-export function match(payments, deals, config) {
+function isCandidatePair(payment, deal) {
+  if (payment.email && deal.email) return payment.email === deal.email;
+  return !payment.email && !deal.email;
+}
+
+export function match(payments, deals, config = {}) {
   const cfg = { ...DEFAULT_CONFIG, ...config };
 
-  const pairs = [];
+  const candidates = [];
   for (const payment of payments) {
     for (const deal of deals) {
-      const scored = scorePair(payment, deal, cfg);
-      if (scored && scored.score >= cfg.reviewThreshold) {
-        pairs.push({ payment, deal, confidence: scored.score, reasons: scored.reasons });
-      }
+      if (!isCandidatePair(payment, deal)) continue;
+      const { points, reasons } = scorePair(payment, deal, cfg);
+      if (points < cfg.reviewThreshold) continue;
+      candidates.push({ payment, deal, confidence: points, reasons });
     }
   }
-  pairs.sort((a, b) => b.confidence - a.confidence);
+
+  candidates.sort((a, b) => b.confidence - a.confidence);
 
   const claimedPayments = new Set();
   const claimedDeals = new Set();
   const matched = [];
   const review = [];
 
-  for (const pair of pairs) {
-    if (claimedPayments.has(pair.payment) || claimedDeals.has(pair.deal)) continue;
-    claimedPayments.add(pair.payment);
-    claimedDeals.add(pair.deal);
-    if (pair.confidence >= cfg.autoMatchThreshold) {
-      matched.push(pair);
+  for (const candidate of candidates) {
+    if (claimedPayments.has(candidate.payment) || claimedDeals.has(candidate.deal)) continue;
+    claimedPayments.add(candidate.payment);
+    claimedDeals.add(candidate.deal);
+    if (candidate.confidence >= cfg.autoMatchThreshold) {
+      matched.push(candidate);
     } else {
-      review.push(pair);
+      review.push(candidate);
     }
   }
 

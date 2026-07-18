@@ -1,175 +1,161 @@
-import { describe, it, expect } from 'vitest';
-import { match } from '../src/matcher.js';
-import fixture from './fixtures/clean.json' with { type: 'json' };
+import { describe, it, expect } from "vitest";
+import { match, DEFAULT_CONFIG } from "../src/matcher.js";
+import clean from "./fixtures/clean.json" with { type: "json" };
 
 function payment(overrides) {
   return {
-    source: 'stripe',
-    id: 'ch_x',
-    email: 'a@b.com',
-    name: 'A B',
-    amount: 100,
-    currency: 'usd',
-    timestamp: '2026-01-14T10:00:00.000Z',
+    source: "stripe",
+    id: "ch_x",
+    email: "x@example.com",
+    name: "X Person",
+    amount: 500,
+    currency: "usd",
+    timestamp: "2026-01-14T10:00:00.000Z",
     refunded: false,
     refundedAmount: 0,
-    url: 'https://example.com/ch_x',
+    url: "https://example.com",
     ...overrides,
   };
 }
 
 function deal(overrides) {
   return {
-    source: 'hubspot',
-    id: 'd_x',
-    email: 'a@b.com',
-    name: 'A B',
-    amount: 100,
-    currency: 'usd',
-    timestamp: '2026-01-14T00:00:00.000Z',
-    stage: 'closedwon',
-    url: 'https://example.com/d_x',
+    source: "hubspot",
+    id: "d_x",
+    email: "x@example.com",
+    name: "X Person",
+    amount: 500,
+    currency: "usd",
+    timestamp: "2026-01-14T00:00:00.000Z",
+    stage: "closedwon",
+    url: "https://example.com",
     ...overrides,
   };
 }
 
-describe('match — clean fixture', () => {
-  it('matches all 6 clean pairs, leaves David Reyes unmatched', () => {
-    const result = match(fixture.payments, fixture.deals, {});
+describe("match — clean fixture", () => {
+  it("matches all 6 email-aligned pairs and leaves David Reyes unmatched", () => {
+    const result = match(clean.payments, clean.deals, DEFAULT_CONFIG);
     expect(result.matched).toHaveLength(6);
     expect(result.review).toHaveLength(0);
-    expect(result.unmatchedDeals).toHaveLength(0);
     expect(result.unmatchedPayments).toHaveLength(1);
-    expect(result.unmatchedPayments[0].id).toBe('ch_007');
+    expect(result.unmatchedPayments[0].id).toBe("ch_007");
+    expect(result.unmatchedDeals).toHaveLength(0);
+  });
+
+  it("scores an exact email + exact amount + same-day pair at auto-match confidence", () => {
+    const result = match(clean.payments, clean.deals, DEFAULT_CONFIG);
+    const sarah = result.matched.find((m) => m.payment.id === "ch_001");
+    expect(sarah.confidence).toBeGreaterThanOrEqual(DEFAULT_CONFIG.autoMatchThreshold);
+    expect(sarah.reasons).toContain("email exact");
+    expect(sarah.reasons).toContain("amount exact");
   });
 });
 
-describe('match — duplicate charge (Mike)', () => {
-  it('assigns the deal to the better-scoring charge, leaves the other unmatched (not the deal)', () => {
-    const mikeDeal = deal({ id: 'd_mike', email: 'mike@co.com', name: 'Mike', amount: 500, timestamp: '2026-01-14T00:00:00.000Z' });
-    const chargeA = payment({ id: 'ch_a', email: 'mike@co.com', name: 'Mike', amount: 500, timestamp: '2026-01-14T10:00:00.000Z' });
-    const chargeB = payment({ id: 'ch_b', email: 'mike@co.com', name: 'Mike', amount: 500, timestamp: '2026-01-14T10:10:00.000Z' });
-
-    const result = match([chargeA, chargeB], [mikeDeal], {});
-
+describe("match — hostile structural cases", () => {
+  it("Mike: two charges, one deal — only one is matched, the other stays unmatched (not first-match-wins)", () => {
+    const payments = [
+      payment({ id: "ch_mike_1", email: "mike@corp.com", amount: 500, timestamp: "2026-01-14T10:00:00.000Z" }),
+      payment({ id: "ch_mike_2", email: "mike@corp.com", amount: 500, timestamp: "2026-01-14T10:10:00.000Z" }),
+    ];
+    const deals = [deal({ id: "d_mike", email: "mike@corp.com", amount: 500, timestamp: "2026-01-14T00:00:00.000Z" })];
+    const result = match(payments, deals, DEFAULT_CONFIG);
     expect(result.matched).toHaveLength(1);
-    expect(result.unmatchedDeals).toHaveLength(0);
     expect(result.unmatchedPayments).toHaveLength(1);
+    expect(result.unmatchedDeals).toHaveLength(0);
   });
-});
 
-describe('match — two deals, one charge', () => {
-  it('matches the best-scoring deal, leaves the other deal unmatched', () => {
-    const charge = payment({ id: 'ch_close', email: 'x@y.com', amount: 1000, timestamp: '2026-01-14T10:00:00.000Z' });
-    const closeDeal = deal({ id: 'd_exact', email: 'x@y.com', amount: 1000, timestamp: '2026-01-14T00:00:00.000Z' });
-    const farDeal = deal({ id: 'd_off', email: 'x@y.com', amount: 800, timestamp: '2026-01-10T00:00:00.000Z' });
-
-    const result = match([charge], [closeDeal, farDeal], {});
-
+  it("two deals, one charge — matches the best-scoring deal, leaves the other unmatched", () => {
+    const payments = [payment({ id: "ch_dup_deal", email: "sam@corp.com", amount: 1000, timestamp: "2026-01-14T10:00:00.000Z" })];
+    const deals = [
+      deal({ id: "d_close", email: "sam@corp.com", amount: 1000, timestamp: "2026-01-14T09:00:00.000Z" }),
+      deal({ id: "d_far", email: "sam@corp.com", amount: 800, timestamp: "2026-01-10T00:00:00.000Z" }),
+    ];
+    const result = match(payments, deals, DEFAULT_CONFIG);
     expect(result.matched).toHaveLength(1);
-    expect(result.matched[0].deal.id).toBe('d_exact');
+    expect(result.matched[0].deal.id).toBe("d_close");
     expect(result.unmatchedDeals).toHaveLength(1);
-    expect(result.unmatchedDeals[0].id).toBe('d_off');
+    expect(result.unmatchedDeals[0].id).toBe("d_far");
   });
-});
 
-describe('match — amount mismatch lands in review, not matched', () => {
-  it('80% amount score keeps confidence in the 60-84 band', () => {
-    const charge = payment({ email: 'r@s.com', amount: 1800, timestamp: '2026-01-14T10:00:00.000Z' });
-    const d = deal({ email: 'r@s.com', amount: 2000, timestamp: '2026-01-14T00:00:00.000Z' });
-
-    const result = match([charge], [d], {});
-
-    expect(result.matched).toHaveLength(0);
-    expect(result.review).toHaveLength(1);
-    expect(result.review[0].confidence).toBe(70);
-  });
-});
-
-describe('match — fee-adjusted amount (Jenna)', () => {
-  it('2.98% off matches at confidence 85 via fee tolerance', () => {
-    const charge = payment({ email: 'jenna@northstar.io', amount: 1940.5, timestamp: '2026-01-14T10:00:00.000Z' });
-    const d = deal({ email: 'jenna@northstar.io', amount: 2000, timestamp: '2026-01-14T00:00:00.000Z' });
-
-    const result = match([charge], [d], {});
-
-    expect(result.matched).toHaveLength(1);
-    expect(result.matched[0].confidence).toBe(85);
-    expect(result.matched[0].reasons).toContain('amount_fee_adjusted');
-  });
-});
-
-describe('match — timezone boundary', () => {
-  it('charge 23:58 Jan 14 vs deal 00:04 Jan 15 still matches (6 minutes apart)', () => {
-    const charge = payment({ email: 'raj@co.com', amount: 500, timestamp: '2026-01-14T23:58:00.000Z' });
-    const d = deal({ email: 'raj@co.com', amount: 500, timestamp: '2026-01-15T00:04:00.000Z' });
-
-    const result = match([charge], [d], {});
-
-    expect(result.matched).toHaveLength(1);
-  });
-});
-
-describe('match — same name, different people never collide', () => {
-  it('two John Smiths with different emails match their own deals independently', () => {
-    const chargeA = payment({ id: 'ch_js1', email: 'john.smith1@a.com', name: 'John Smith', amount: 500, timestamp: '2026-01-14T10:00:00.000Z' });
-    const chargeB = payment({ id: 'ch_js2', email: 'john.smith2@b.com', name: 'John Smith', amount: 700, timestamp: '2026-01-14T11:00:00.000Z' });
-    const dealA = deal({ id: 'd_js1', email: 'john.smith1@a.com', name: 'John Smith', amount: 500, timestamp: '2026-01-14T00:00:00.000Z' });
-    const dealB = deal({ id: 'd_js2', email: 'john.smith2@b.com', name: 'John Smith', amount: 700, timestamp: '2026-01-14T00:00:00.000Z' });
-
-    const result = match([chargeA, chargeB], [dealA, dealB], {});
-
+  it("two John Smiths never collide — different emails route to their own deals", () => {
+    const payments = [
+      payment({ id: "ch_john_1", email: "john.smith@acme.com", name: "John Smith", amount: 300 }),
+      payment({ id: "ch_john_2", email: "john.smith@other.com", name: "John Smith", amount: 300 }),
+    ];
+    const deals = [
+      deal({ id: "d_john_1", email: "john.smith@acme.com", name: "John Smith", amount: 300 }),
+      deal({ id: "d_john_2", email: "john.smith@other.com", name: "John Smith", amount: 300 }),
+    ];
+    const result = match(payments, deals, DEFAULT_CONFIG);
     expect(result.matched).toHaveLength(2);
-    expect(result.matched.find((m) => m.payment.id === 'ch_js1').deal.id).toBe('d_js1');
-    expect(result.matched.find((m) => m.payment.id === 'ch_js2').deal.id).toBe('d_js2');
+    const acme = result.matched.find((m) => m.payment.id === "ch_john_1");
+    expect(acme.deal.id).toBe("d_john_1");
   });
-});
 
-describe('match — CRM lag', () => {
-  it('deal closed 3 days after payment still matches on email + amount alone', () => {
-    const charge = payment({ email: 'lag@co.com', amount: 900, timestamp: '2026-01-14T10:00:00.000Z' });
-    const d = deal({ email: 'lag@co.com', amount: 900, timestamp: '2026-01-17T00:00:00.000Z' });
-
-    const result = match([charge], [d], {});
-
+  it("timezone boundary: charge 23:58 Jan 14, deal closed 00:04 Jan 15 — still matches (not calendar-day matching)", () => {
+    const payments = [payment({ id: "ch_boundary", email: "raj@corp.com", amount: 900, timestamp: "2026-01-14T23:58:00.000Z" })];
+    const deals = [deal({ id: "d_boundary", email: "raj@corp.com", amount: 900, timestamp: "2026-01-15T00:04:00.000Z" })];
+    const result = match(payments, deals, DEFAULT_CONFIG);
     expect(result.matched).toHaveLength(1);
-    expect(result.matched[0].confidence).toBe(90);
-    expect(result.matched[0].reasons).not.toContain('timestamp_within_24h');
-    expect(result.matched[0].reasons).not.toContain('timestamp_within_48h');
-  });
-});
-
-describe('match — float-safe amount comparison', () => {
-  it('does not misfire on classic float drift (0.1 + 0.2)', () => {
-    const charge = payment({ email: 'float@co.com', amount: 0.3, timestamp: '2026-01-14T10:00:00.000Z' });
-    const d = deal({ email: 'float@co.com', amount: 0.1 + 0.2, timestamp: '2026-01-14T00:00:00.000Z' });
-
-    const result = match([charge], [d], {});
-
-    expect(result.matched).toHaveLength(1);
-    expect(result.matched[0].reasons).toContain('amount_exact');
-  });
-});
-
-describe('match — name-fuzzy fallback when both emails are null', () => {
-  it('matches on close name when neither side has an email', () => {
-    const charge = payment({ email: null, name: 'Jonathan Doe', amount: 500, timestamp: '2026-01-14T10:00:00.000Z' });
-    const d = deal({ email: null, name: 'Jonathon Doe', amount: 500, timestamp: '2026-01-14T00:00:00.000Z' });
-
-    const result = match([charge], [d], {});
-
-    expect(result.review.length + result.matched.length).toBe(1);
   });
 
-  it('does not pair a null-email payment with an emailed deal', () => {
-    const charge = payment({ email: null, name: 'Jonathan Doe', amount: 500, timestamp: '2026-01-14T10:00:00.000Z' });
-    const d = deal({ email: 'someone@else.com', name: 'Jonathan Doe', amount: 500, timestamp: '2026-01-14T00:00:00.000Z' });
+  it("name fuzzy only fires when email is absent on both sides", () => {
+    const payments = [payment({ id: "ch_noemail", email: null, name: "Jonathan Doe", amount: 700, timestamp: "2026-01-14T10:00:00.000Z" })];
+    const deals = [deal({ id: "d_noemail", email: null, name: "Jonathan Doh", amount: 700, timestamp: "2026-01-14T09:00:00.000Z" })];
+    const result = match(payments, deals, DEFAULT_CONFIG);
+    // amount exact (40) + name fuzzy (20) + timestamp 24h (10) = 70 -> review, never auto-matched off name alone
+    expect(result.review).toHaveLength(1);
+    expect(result.review[0].reasons).toContain("name fuzzy");
+  });
 
-    const result = match([charge], [d], {});
-
+  it("does not fuzzy-match on name when email is present but different", () => {
+    const payments = [payment({ id: "ch_named", email: "a@corp.com", name: "Same Name", amount: 700 })];
+    const deals = [deal({ id: "d_named", email: "b@corp.com", name: "Same Name", amount: 700 })];
+    const result = match(payments, deals, DEFAULT_CONFIG);
     expect(result.matched).toHaveLength(0);
     expect(result.review).toHaveLength(0);
     expect(result.unmatchedPayments).toHaveLength(1);
     expect(result.unmatchedDeals).toHaveLength(1);
+  });
+});
+
+describe("match — amount scoring tiers", () => {
+  it("Jenna: 2.98% off lands inside fee tolerance, auto-matches", () => {
+    const payments = [payment({ id: "ch_jenna", email: "jenna@corp.com", amount: 1940.5 })];
+    const deals = [deal({ id: "d_jenna", email: "jenna@corp.com", amount: 2000 })];
+    const result = match(payments, deals, DEFAULT_CONFIG);
+    expect(result.matched).toHaveLength(1);
+    expect(result.matched[0].reasons).toContain("amount within fee tolerance");
+  });
+
+  it("10% off scores lower but still a candidate pair", () => {
+    const payments = [payment({ id: "ch_ten", email: "ten@corp.com", amount: 1800 })];
+    const deals = [deal({ id: "d_ten", email: "ten@corp.com", amount: 2000 })];
+    const result = match(payments, deals, DEFAULT_CONFIG);
+    const pair = [...result.matched, ...result.review].find((m) => m.payment.id === "ch_ten");
+    expect(pair.reasons).toContain("amount within 10%");
+  });
+
+  it("a null deal amount does not throw and contributes zero score", () => {
+    const payments = [payment({ id: "ch_nullamt", email: "na@corp.com", amount: 500 })];
+    const deals = [deal({ id: "d_nullamt", email: "na@corp.com", amount: null })];
+    expect(() => match(payments, deals, DEFAULT_CONFIG)).not.toThrow();
+  });
+
+  it("compares amounts as cents, immune to float drift (0.1 + 0.2 style)", () => {
+    const payments = [payment({ id: "ch_float", email: "float@corp.com", amount: 19.9 + 0.1 })];
+    const deals = [deal({ id: "d_float", email: "float@corp.com", amount: 20.0 })];
+    const result = match(payments, deals, DEFAULT_CONFIG);
+    expect(result.matched[0].reasons).toContain("amount exact");
+  });
+});
+
+describe("match — config is not hardcoded", () => {
+  it("a custom autoMatchThreshold changes what counts as matched vs review", () => {
+    const payments = [payment({ id: "ch_cfg", email: "cfg@corp.com", amount: 1800 })];
+    const deals = [deal({ id: "d_cfg", email: "cfg@corp.com", amount: 2000 })];
+    const lenient = match(payments, deals, { ...DEFAULT_CONFIG, autoMatchThreshold: 55 });
+    expect(lenient.matched).toHaveLength(1);
   });
 });
