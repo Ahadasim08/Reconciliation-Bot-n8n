@@ -1,0 +1,43 @@
+{
+  "batch": "seed:batch-1784358718",
+  "window_start": "2026-07-18T00:00:00+00:00",
+  "window_end": "2026-07-18T23:59:59+00:00",
+  "payments_expected": 46,
+  "deals_expected": 45,
+  "exceptions_expected": 5,
+  "exceptions": [
+    {
+      "type": "DUPLICATE_CHARGE",
+      "key": "mike_duplicate",
+      "amount": 500.0
+    },
+    {
+      "type": "PAYMENT_NO_DEAL",
+      "key": "david_no_deal",
+      "amount": 3000.0
+    },
+    {
+      "type": "DEAL_NO_PAYMENT",
+      "key": "priya_no_payment",
+      "amount": 1200.0
+    },
+    {
+      "type": "ORPHAN_REFUND",
+      "key": "tom_orphan_refund",
+      "amount": 1100.0
+    },
+    {
+      "type": "REVIEW",
+      "key": "jenna_review",
+      "amount": 1940.5
+    }
+  ],
+  "must_match_not_flag": [
+    "sarah_casing",
+    "jenna_plustag",
+    "raj_midnight",
+    "john_smith_a",
+    "john_smith_b"
+  ],
+  "note": "declined charge (tok_chargeDeclined) intentionally excluded from payments_expected"
+}
