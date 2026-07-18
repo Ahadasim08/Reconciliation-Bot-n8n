@@ -305,6 +305,13 @@ it's always `null` in fixtures, a no-op for the exclusion logic. 3 new tests.
   tests. Also added `subscriptionId: null` to `test/fixtures/clean.json`'s
   payments for contract consistency.
 - 44/44 tests passing. Seam check still clean. **Phase 3 formally closed.**
+- Post-close: considered starting Phase 5 canvas work (fetch nodes) ahead of
+  Murad's Phase 4. Decided against building/injecting the full workflow
+  early — `build/inject.js` needs `format.js` to exist, and PLAN.md marks
+  Phase 5 as "both, together." Ahad will wait for Murad's `format.js` before
+  touching the n8n canvas skeleton (nodes 1-6 are fair game solo per PLAN
+  §5's risk register — "moves to Phase 6 hardening prep and INSTALL.md
+  early" — but not started this session).
 
 ## Problems solved (never re-solve these)
 | Problem | Cause | Fix |
