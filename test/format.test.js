@@ -133,4 +133,37 @@ describe('formatSheetRows', () => {
     expect(rows[0].paymentLink).toBeNull();
     expect(rows[0].date).toBe(d.timestamp);
   });
+
+  it('neutralizes a customer name that would run as a spreadsheet formula', () => {
+    const p = payment({ id: 'ch_3', name: '=HYPERLINK("https://evil.example","click")' });
+    const exceptions = [{ type: 'PAYMENT_NO_DEAL', payment: p, unmatchable: false }];
+
+    const rows = formatSheetRows(exceptions);
+
+    expect(rows[0].customer.startsWith("'")).toBe(true);
+  });
+
+  it('leaves an ordinary customer name untouched', () => {
+    const p = payment({ id: 'ch_4', name: 'Sarah Chen' });
+    const exceptions = [{ type: 'PAYMENT_NO_DEAL', payment: p, unmatchable: false }];
+
+    const rows = formatSheetRows(exceptions);
+
+    expect(rows[0].customer).toBe('Sarah Chen');
+  });
+});
+
+describe('formatSlackMessage — mrkdwn injection', () => {
+  it('escapes &, <, > in a customer name before it reaches Slack block text', () => {
+    const p = payment({ id: 'ch_5', name: 'Bob <http://evil.example|click here> & friends' });
+    const matchResult = { ...emptyMatch, unmatchedPayments: [p] };
+    const exceptions = [{ type: 'PAYMENT_NO_DEAL', payment: p, unmatchable: false }];
+
+    const message = formatSlackMessage(matchResult, exceptions, {});
+
+    const line = message.blocks[1].text.text;
+    expect(line).not.toContain('<http://evil.example|click here>');
+    expect(line).toContain('&lt;http://evil.example|click here&gt;');
+    expect(line).toContain('&amp; friends');
+  });
 });

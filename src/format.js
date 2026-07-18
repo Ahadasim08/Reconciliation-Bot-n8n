@@ -29,8 +29,24 @@ function exceptionEmail(exception) {
   return (exception.payment && exception.payment.email) || (exception.deal && exception.deal.email) || null;
 }
 
+// Sheet formula injection: Excel/Google Sheets runs a cell starting with
+// =/+/-/@ as a formula. Customer name/email are attacker-influenceable
+// (whatever the customer typed at checkout), so neutralize before they
+// reach a spreadsheet cell.
+function sanitizeForSheet(value) {
+  if (value == null) return value;
+  return /^[=+\-@]/.test(value) ? `'${value}` : value;
+}
+
+// Slack mrkdwn injection: &, <, > have special meaning in Slack's mrkdwn
+// (link/entity syntax) and must be escaped before interpolation into block
+// text, per Slack's own escaping rules.
+function escapeMrkdwn(value) {
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function exceptionLine(exception) {
-  const customer = exceptionCustomer(exception) || 'unknown';
+  const customer = escapeMrkdwn(exceptionCustomer(exception) || 'unknown');
   const amount = exceptionAmount(exception);
   const amountStr = amount != null ? `$${amount.toFixed(2)}` : 'unknown amount';
   return `*${exception.type}* — ${customer} — ${amountStr}`;
@@ -76,8 +92,8 @@ export function formatSheetRows(exceptions) {
       date: record.timestamp,
       type: exception.type,
       amount: exceptionAmount(exception),
-      customer: exceptionCustomer(exception),
-      email: exceptionEmail(exception),
+      customer: sanitizeForSheet(exceptionCustomer(exception)),
+      email: sanitizeForSheet(exceptionEmail(exception)),
       confidence: exception.confidence != null ? exception.confidence : null,
       paymentLink: exception.payment ? exception.payment.url : null,
       dealLink: exception.deal ? exception.deal.url : null,
