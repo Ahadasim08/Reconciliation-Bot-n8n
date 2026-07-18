@@ -14,6 +14,7 @@ function payment(overrides) {
     timestamp: '2026-01-14T10:00:00.000Z',
     refunded: false,
     refundedAmount: 0,
+    subscriptionId: null,
     url: 'https://example.com/ch_x',
     ...overrides,
   };
@@ -161,6 +162,37 @@ describe('classify — AMOUNT_MISMATCH for amounts beyond every tolerance tier',
 
     expect(exceptions).toHaveLength(1);
     expect(exceptions[0].type).toBe('AMOUNT_MISMATCH');
+  });
+});
+
+describe('classify — subscription exclusion', () => {
+  it('skips PAYMENT_NO_DEAL for an unmatched renewal charge (subscriptionId set)', () => {
+    const p = payment({ subscriptionId: 'sub_123' });
+    const matchResult = { ...emptyMatch, unmatchedPayments: [p] };
+
+    const exceptions = classify(matchResult, {});
+
+    expect(exceptions).toHaveLength(0);
+  });
+
+  it('still flags PAYMENT_NO_DEAL for a one-off charge (subscriptionId null)', () => {
+    const p = payment({ subscriptionId: null });
+    const matchResult = { ...emptyMatch, unmatchedPayments: [p] };
+
+    const exceptions = classify(matchResult, {});
+
+    expect(exceptions).toHaveLength(1);
+    expect(exceptions[0].type).toBe('PAYMENT_NO_DEAL');
+  });
+
+  it('excludeSubscriptions: false disables the skip, even for a renewal charge', () => {
+    const p = payment({ subscriptionId: 'sub_123' });
+    const matchResult = { ...emptyMatch, unmatchedPayments: [p] };
+
+    const exceptions = classify(matchResult, { excludeSubscriptions: false });
+
+    expect(exceptions).toHaveLength(1);
+    expect(exceptions[0].type).toBe('PAYMENT_NO_DEAL');
   });
 });
 

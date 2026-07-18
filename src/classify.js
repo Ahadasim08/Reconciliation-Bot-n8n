@@ -1,5 +1,6 @@
 const DEFAULT_CONFIG = {
   duplicateWindowMs: 60 * 60 * 1000,
+  excludeSubscriptions: true,
 };
 
 function isDuplicateOf(a, b, windowMs) {
@@ -43,6 +44,8 @@ export function classify(matchResult, config) {
     const duplicateOf = allPayments.find((other) => isDuplicateOf(payment, other, cfg.duplicateWindowMs));
     if (duplicateOf) {
       exceptions.push({ type: 'DUPLICATE_CHARGE', payment, duplicateOf });
+    } else if (cfg.excludeSubscriptions && payment.subscriptionId != null) {
+      // subscription renewal, no new deal expected — not an exception (PLAN.md §7.4)
     } else {
       exceptions.push({ type: 'PAYMENT_NO_DEAL', payment, unmatchable: !payment.email });
     }

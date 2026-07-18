@@ -25,6 +25,7 @@ test, same day. (Source of truth: PLAN.md section 2.)
   timestamp: "2026-01-14T10:14:32.000Z",  // ALWAYS UTC ISO8601
   refunded: false,                        // true ONLY when the FULL amount was refunded
   refundedAmount: 0.00,                   // can be > 0 while refunded is still false (partial)
+  subscriptionId: null,                   // Stripe subscription ID string, or null for a one-off charge
   url: "https://dashboard.stripe.com/test/payments/ch_3Ox1a2B..."
 }
 ```
@@ -109,6 +110,12 @@ table's `exception_type` column (`db/schema.sql`).
   `refundedAmount > 0`. A partial refund on an otherwise-matching charge is
   **not** an orphan — it's a clean match, full stop, in v1 (no `partial_refund`
   annotation yet; see PLAN.md §7.4, parked as a Phase 4 `format.js` decision).
+- **`subscriptionId` is `null` for a one-off charge, the Stripe subscription ID
+  string for a renewal.** Exists so `classify.js` can skip `PAYMENT_NO_DEAL`
+  for subscription renewals (PLAN.md §7.4 — "the #1 thing that would annoy a
+  real client," since a renewal charge normally has no matching new deal).
+  `classify.js`'s exclusion is config-gated (`excludeSubscriptions`, defaults
+  to on) — it only reads the contract field, never the vendor name.
 
 ---
 
@@ -129,3 +136,16 @@ assume implicitly.
 
 - [ ] Ahad — confirm this matches what the seeder/Stripe fetch node actually
       produce (a partial refund should leave `refunded: false`)
+
+### Addendum — 2026-07-18 (Ahad + Murad, agreed live)
+
+Added `subscriptionId` to the payment shape (§7.4 subscription-exclusion).
+Both agreed: `null` for a one-off charge, the Stripe subscription ID string
+for a renewal. `classify.js` gets a config-gated skip (`excludeSubscriptions`)
+so renewal charges don't fire false `PAYMENT_NO_DEAL`. Ahad's Stripe fetch
+node (Phase 5, not built yet) is responsible for actually populating the
+field — until then it's always `null` in fixtures, which is a no-op for the
+exclusion logic.
+
+- [x] Ahad — will populate `subscriptionId` from the Stripe fetch node
+- [x] Murad — `classify.js` reads it, config-gated, no vendor name in the seam

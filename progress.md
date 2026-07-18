@@ -1,7 +1,7 @@
 # Progress
 
-**Last updated:** 2026-07-18 by Murad, session 7
-**Current phase:** 2 CLOSED (Ahad) — 3 IN PROGRESS (Murad, matcher)
+**Last updated:** 2026-07-18 by Ahad, session 8
+**Current phase:** 3 CLOSED — next is Phase 4 (format.js, Murad)
 **Days elapsed:** 2 / 21
 
 ## Phase 0 — 12-check results
@@ -54,11 +54,21 @@ instead of `AMOUNT_MISMATCH`. All three fixed test-first. 41/41 tests passing
 now. Seam check still clean: `grep -ri "hubspot\|stripe"` returns nothing in
 `matcher.js` or `classify.js`.
 
-Two gaps from that audit are deliberately NOT fixed yet — see Decisions log:
-subscription-exclusion needs a contract change (cross-team, not Murad's alone),
-zero-amount Stripe charge filtering is Phase 5 fetch-node territory. Everything
+One gap from that audit is deliberately NOT fixed yet — see Decisions log:
+zero-amount Stripe charge filtering is Phase 5 fetch-node territory, needs a
+real Stripe charge object that doesn't exist in pure-function scope. Everything
 else in §7 is either covered or correctly out of scope (pagination, rate-limit
 backoff, window-boundary inclusivity — Phase 5/6, not pure-function work).
+
+**Subscription-exclusion resolved this session (Ahad + Murad, live conversation).**
+Added `subscriptionId` to the payment contract shape (`null` for one-off,
+Stripe subscription ID string for a renewal) — both signed off in
+`docs/CONTRACT.md`. `classify.js` now skips `PAYMENT_NO_DEAL` for any
+unmatched payment with `subscriptionId != null`, gated behind
+`excludeSubscriptions` (defaults `true`). Ahad's Stripe fetch node (Phase 5,
+not built yet) is responsible for actually populating the field — until then
+it's always `null` in fixtures, a no-op for the exclusion logic. 3 new tests.
+44/44 total. **Phase 3 formally CLOSED.**
 
 ## Done
 - [x] docker-compose.yml written (n8n + Postgres)
@@ -94,10 +104,11 @@ backoff, window-boundary inclusivity — Phase 5/6, not pure-function work).
       found and fixed (see Problems solved); 2 gaps logged, not fixed
       (subscription exclusion — needs contract change; zero-amount Stripe
       charge filtering — Phase 5 scope)
-- [ ] Phase 3 exit criteria (≥20 tests covering all of §7) — 41 tests, every
-      matcher/classify-relevant §7 row now covered or explicitly logged as
-      out of scope. Still not formally closed — no one has done a final
-      sign-off pass; next session should decide if this counts as done.
+- [x] Phase 3 exit criteria (≥20 tests covering all of §7) — 44 tests, every
+      matcher/classify-relevant §7 row covered or explicitly logged as out of
+      scope. Subscription-exclusion resolved (contract updated, both signed
+      off). Zero-amount Stripe charge filtering explicitly deferred to Phase 5.
+      **Phase 3 CLOSED.**
 
 ## Session log
 ### Session 1 — 2026-07-17
@@ -270,6 +281,31 @@ backoff, window-boundary inclusivity — Phase 5/6, not pure-function work).
     zero-amount Stripe validation charges (Phase 5 fetch-node territory).
   - 41/41 tests passing after fixes.
 
+### Session 8 — 2026-07-18 (Ahad)
+- Pulled Murad's session-7 push (`f157561`) — his audited `normalize.js` /
+  `matcher.js` / `classify.js` (41 tests) plus the `refunded`-semantics
+  contract addendum. Fast-forward, no conflicts.
+- Note on how this session's earlier attempt went: I had independently
+  written my own competing `normalize.js`/`matcher.js`/`classify.js` in
+  parallel with Murad (same day, same phase, neither aware of the other).
+  Pushed mine first; Murad's push landed seconds later and included a
+  proper audit against PLAN.md §7 that found real bugs in *my* version too
+  (duplicate-detection only scanning `unmatchedPayments` misses Mike's case
+  once the matcher legitimately claims one charge; amount-mismatch
+  reclassification only ran on the `matched` bucket, never `review`, so the
+  plan's own $1,800/$2,000 worked example never fired; no currency check at
+  all). His merge kept his side over mine — correctly. My own accusation
+  that his version mishandled partial refunds didn't hold up either: Stripe's
+  `refunded` field is fully-refunded-only by definition, which his code
+  already assumed correctly.
+- Talked to Murad directly (not through this session) and agreed on the
+  subscription-exclusion contract change. Added `subscriptionId` to the
+  payment shape in `docs/CONTRACT.md`, both signed off. Implemented the skip
+  in `classify.js` (`excludeSubscriptions` config flag, defaults on), 3 new
+  tests. Also added `subscriptionId: null` to `test/fixtures/clean.json`'s
+  payments for contract consistency.
+- 44/44 tests passing. Seam check still clean. **Phase 3 formally closed.**
+
 ## Problems solved (never re-solve these)
 | Problem | Cause | Fix |
 |---|---|---|
@@ -285,30 +321,23 @@ backoff, window-boundary inclusivity — Phase 5/6, not pure-function work).
 | Amounts >10% off were indistinguishable from missing amount data | Amount scoring only pushed a `reasons` tag for the three positive tiers (exact/fee/10%); anything worse contributed nothing, so `classify.js` had no signal to work with | `matcher.js` now tags `amount_mismatch` whenever both amounts exist but clear no tolerance tier; `classify.js` treats it the same as `amount_within_10pct` → `AMOUNT_MISMATCH`. |
 
 ## Blockers
-None. Two open items need attention but aren't blocking (see Next session).
+None.
 
 ## Next session — start here
-Phase 2 CLOSED (Ahad). Phase 3 (matcher, Murad) is functionally solid — 41
-tests, audited against the full §7 catalogue, 3 real bugs found and fixed this
-session. Two things to resolve before calling Phase 3 fully closed:
-1. **Subscription-exclusion (§7.4 — "the #1 thing that would annoy a real
-   client").** Needs a new field on the payment contract (e.g.
-   `subscriptionId`, nullable) plus a config flag in `classify.js` to skip
-   `PAYMENT_NO_DEAL` for subscription-renewal charges. This is a
-   `docs/CONTRACT.md` shape change — per CLAUDE.md that's "a conversation, not
-   a commit." Raise it with Ahad before touching the contract; his Stripe
-   fetch node would need to actually populate the field too.
-2. **Zero-amount Stripe validation charges (§7.2).** Stripe creates
-   zero-amount charges for card validation; these should never reach the
-   matcher. Deliberately not implemented — this is Phase 5 fetch-node
-   filtering (vendor-specific), not pure-function scope. Revisit when
-   building the Stripe fetch node.
-3. Once 1 and 2 are resolved (or explicitly deferred to Phase 5/6 in
-   writing), Phase 3 can be called closed. Next actual phase is Phase 4 —
-   `src/format.js` (Murad): exceptions → Slack blocks + Sheet rows. Don't
-   start it before Phase 3 is genuinely closed.
-4. Ahad's seeder (Phase 2) was verified against live Stripe + HubSpot in
-   session 6 — no further re-verification needed.
+**Phase 3 CLOSED.** Next is Phase 4 (Murad): `src/format.js` — exceptions →
+Slack blocks + Sheet rows, per PLAN.md §6 Phase 4:
+1. Headline format: `N payments · M clean · X exceptions · $Y unreconciled`.
+   Zero exceptions still posts (a silent bot looks broken).
+2. Cap at 10 exceptions in the Slack message, then "…and N more, see sheet."
+3. Severity ordering: `DUPLICATE_CHARGE` and `PAYMENT_NO_DEAL` first, `REVIEW`
+   last.
+4. Sheet rows: date, type, amount, customer, email, confidence, Stripe link,
+   CRM link, resolved checkbox. Append-only, skip if a row already exists for
+   the same `charge_id` + `type` (Sheet-level idempotency).
+5. Remember: zero-amount Stripe charge filtering is still deferred to Phase 5
+   (Ahad's fetch node) — not forgotten, just not pure-function scope.
+6. One phase per session — don't start Phase 5 (assembly) even if there's
+   time left.
 
 ## Ideas parked (NOT doing, do not start)
 - Web dashboard — README extensions only
@@ -328,3 +357,4 @@ session. Two things to resolve before calling Phase 3 fully closed:
 | 2026-07-18 | AMOUNT_MISMATCH overrides plain REVIEW when the only amount signal is `amount_within_10pct` | PLAN.md §7.2 states 10% variance is AMOUNT_MISMATCH outright, not a soft REVIEW — confidence banding alone isn't enough, the classifier reads matcher reasons. |
 | 2026-07-18 | Subscription-exclusion (§7.4) deliberately NOT implemented this session | Requires a new field on the payment contract (`subscriptionId`) — a shape change needs both people, per CLAUDE.md. Logged here instead of silently deciding the field name/shape alone. |
 | 2026-07-18 | Zero-amount Stripe validation-charge filtering (§7.2) deliberately NOT implemented this session | Vendor-specific (Stripe-only) and needs a real charge object with a status/type field not yet in the contract — belongs in the Phase 5 Stripe fetch node, not the pure-function matcher/classify. |
+| 2026-07-18 | Added `subscriptionId` (nullable) to the payment contract shape | Only way `classify.js` can distinguish a subscription renewal from a genuine untracked payment. Agreed live between Ahad and Murad, both signed off in `docs/CONTRACT.md`. Populating the real value is Ahad's Phase 5 fetch-node work. |
