@@ -38,6 +38,8 @@ function nameSimilarity(nameA, nameB) {
 }
 
 function scorePair(payment, deal, config) {
+  if (payment.currency !== deal.currency) return null;
+
   const reasons = [];
   let score = 0;
   let isCandidate = false;
@@ -69,6 +71,8 @@ function scorePair(payment, deal, config) {
     } else if (diffRatio <= config.amountTenPercentTolerance) {
       score += config.scoreAmountTenPercent;
       reasons.push('amount_within_10pct');
+    } else {
+      reasons.push('amount_mismatch');
     }
   }
 

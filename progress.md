@@ -43,12 +43,22 @@ DUPLICATE_CHARGE detection across the full payment set post-matching, and
 AMOUNT_MISMATCH overriding plain REVIEW when the amount reason is only
 `amount_within_10pct` rather than exact/fee-adjusted).
 
-35/35 tests passing (`npm test`). Seam check clean: `grep -ri "hubspot\|stripe"`
-returns nothing in `matcher.js` or `classify.js`. Not yet formally "done" against
-the full §7 catalogue — several rows (currency-mismatch filtering, zero-amount
-Stripe validation charges, pagination, rate-limit backoff, window-boundary
-inclusivity) are operational/upstream concerns for Phase 5/6, not pure-function
-matcher/classify work, and were deliberately left out this session.
+**Audited all 35 tests against the PLAN.md §7 edge-case catalogue row by row.**
+Found and fixed 3 real logic gaps (not just missing tests): a closedwon deal
+with no email was wrongly firing `DEAL_NO_PAYMENT` instead of being skipped; the
+matcher never checked currency, so a EUR charge could silently score-match a
+USD deal; and amounts off by more than the 10% tier (e.g. a 50% partial
+payment) contributed nothing to `reasons`, so `classify.js` couldn't tell
+"amount is way off" from "amount data missing" and produced a bare `REVIEW`
+instead of `AMOUNT_MISMATCH`. All three fixed test-first. 41/41 tests passing
+now. Seam check still clean: `grep -ri "hubspot\|stripe"` returns nothing in
+`matcher.js` or `classify.js`.
+
+Two gaps from that audit are deliberately NOT fixed yet — see Decisions log:
+subscription-exclusion needs a contract change (cross-team, not Murad's alone),
+zero-amount Stripe charge filtering is Phase 5 fetch-node territory. Everything
+else in §7 is either covered or correctly out of scope (pagination, rate-limit
+backoff, window-boundary inclusivity — Phase 5/6, not pure-function work).
 
 ## Done
 - [x] docker-compose.yml written (n8n + Postgres)
@@ -76,11 +86,18 @@ matcher/classify work, and were deliberately left out this session.
 - [x] seeder/teardown.py — deletes tagged HubSpot records, refunds tagged Stripe charges
 - [x] Phase 2 — seeder run for real, verified against live APIs, all counts match expected.json
 - [x] src/normalize.js — normalizeEmail/normalizeAmount/normalizeTimestamp, 12 tests
-- [x] src/matcher.js — real scoring + greedy pair assignment (was stub), 12 tests
-- [x] src/classify.js — matcher output → 5 exception types + REVIEW, 11 tests
-- [ ] Phase 3 exit criteria (≥20 tests covering all of §7) — 35 tests written,
-      core matcher/classify cases covered; several §7 rows are Phase 5/6 scope
-      (pagination, rate limits, currency filtering) — NOT DONE, revisit next session
+- [x] src/matcher.js — real scoring + greedy pair assignment (was stub), currency
+      guard, amount_mismatch tagging — 41 tests total across all three files
+- [x] src/classify.js — matcher output → 5 exception types + REVIEW, null-email
+      deal skip, AMOUNT_MISMATCH on amount_mismatch reason
+- [x] Audited all tests against PLAN.md §7 catalogue row by row — 3 real bugs
+      found and fixed (see Problems solved); 2 gaps logged, not fixed
+      (subscription exclusion — needs contract change; zero-amount Stripe
+      charge filtering — Phase 5 scope)
+- [ ] Phase 3 exit criteria (≥20 tests covering all of §7) — 41 tests, every
+      matcher/classify-relevant §7 row now covered or explicitly logged as
+      out of scope. Still not formally closed — no one has done a final
+      sign-off pass; next session should decide if this counts as done.
 
 ## Session log
 ### Session 1 — 2026-07-17
@@ -231,6 +248,27 @@ matcher/classify work, and were deliberately left out this session.
   `matcher.js`/`classify.js`) returns nothing — confirmed clean both files.
 - Did not touch: `format.js` (Phase 4), any n8n Code/Switch/output nodes
   (Phase 5), Ahad's seeder internals.
+- **Audit pass:** went through PLAN.md §7 (7.1–7.5) row by row against the 35
+  tests. Found 3 real logic gaps, not just missing coverage — fixed all three
+  test-first:
+  - `classify.js` fired `DEAL_NO_PAYMENT` for a closedwon deal with a null
+    email (contact join failed). PLAN §7.1 says skip with a warning, not flag
+    as an exception. Fix: added `&& deal.email` to the condition.
+  - `matcher.js` never checked `currency` — a EUR charge could silently
+    score-match a USD deal on email+amount alone, which §7.2 explicitly
+    forbids ("do not silently compare"). Fix: `scorePair` now returns `null`
+    immediately on any currency mismatch, before any other scoring.
+  - Amounts beyond the 10%-tolerance tier (e.g. a 50% partial payment)
+    contributed 0 to score with no `reasons` entry at all — indistinguishable
+    from "amount data missing." `classify.js` could then only label it plain
+    `REVIEW`, not `AMOUNT_MISMATCH`, contradicting §7.2's partial-payment row.
+    Fix: `matcher.js` now tags `amount_mismatch` whenever amount data exists
+    but clears no tolerance tier; `classify.js` treats that the same as
+    `amount_within_10pct`.
+  - Two items audited but NOT fixed this session (see Decisions log):
+    subscription-exclusion (needs a contract field, cross-team decision) and
+    zero-amount Stripe validation charges (Phase 5 fetch-node territory).
+  - 41/41 tests passing after fixes.
 
 ## Problems solved (never re-solve these)
 | Problem | Cause | Fix |
@@ -242,24 +280,35 @@ matcher/classify work, and were deliberately left out this session.
 | HubSpot token had read-only scopes, seeder needs to create records | S5 only obtained `crm.objects.deals.read` + `crm.objects.contacts.read` (fetch-only, correct for Phase 5 but not Phase 2) | Added `crm.objects.contacts.write` + `crm.objects.deals.write` to the same private app, re-copied token into n8n credential store + `.env`. |
 | Stripe charges can't carry the planned Jan-14 demo date | `created` is server-set at API-call time, not client-settable | Redesigned scenarios.py around an `anchor` (actual run time) with minute offsets, not a fixed calendar date. HubSpot `closedate` is set directly since it has no such restriction. |
 | `python -c "c.metadata.get(...)"` raised `AttributeError: get` on a StripeObject | Stripe SDK's `StripeObject.__getattr__` doesn't proxy `.get()` the way a plain dict does | Use `c['metadata']` subscript access (or `'seed' in md`), not `.get()`, when poking at Stripe objects ad hoc. |
+| `classify.js` flagged closedwon deals with no email as `DEAL_NO_PAYMENT` | Contact-join-failed deals (null email) were never excluded from the unmatched-deal exception check | Added `&& deal.email` guard — null-email deals are skipped, not flagged, per PLAN §7.1. |
+| `matcher.js` could silently match a EUR charge to a USD deal | No currency check anywhere in `scorePair` — only email/amount/timestamp were scored | `scorePair` returns `null` immediately on any `payment.currency !== deal.currency`, before any other scoring runs. |
+| Amounts >10% off were indistinguishable from missing amount data | Amount scoring only pushed a `reasons` tag for the three positive tiers (exact/fee/10%); anything worse contributed nothing, so `classify.js` had no signal to work with | `matcher.js` now tags `amount_mismatch` whenever both amounts exist but clear no tolerance tier; `classify.js` treats it the same as `amount_within_10pct` → `AMOUNT_MISMATCH`. |
 
 ## Blockers
-None.
+None. Two open items need attention but aren't blocking (see Next session).
 
 ## Next session — start here
-Phase 2 CLOSED (Ahad). Phase 3 (matcher, Murad) is IN PROGRESS — continue it,
-do not jump to Phase 4.
-1. Decide if Phase 3 exit criteria are actually met: PLAN.md §6 wants ≥20 tests
-   covering every case in §7. We have 35 tests but haven't audited them row-by-row
-   against the §7 catalogue (7.1–7.5). Do that audit first — list which §7 rows
-   are genuinely uncovered vs. which are correctly out of scope (operational/
-   Phase 5-6 concerns like pagination, rate limits, currency filtering).
-2. Likely remaining gaps worth a look: two-contacts-same-email-different-deals
-   (7.1), "deal moved to won and back same day" (7.4), 3+ way duplicate charges.
-3. Once Phase 3 is genuinely done, next is Phase 4 — `src/format.js` (Murad):
-   exceptions → Slack blocks + Sheet rows. Don't start it before Phase 3 closes.
-4. Ahad's seeder (Phase 2) was verified against live Stripe + HubSpot this
-   session (see Decisions log / session 6) — no further re-verification needed.
+Phase 2 CLOSED (Ahad). Phase 3 (matcher, Murad) is functionally solid — 41
+tests, audited against the full §7 catalogue, 3 real bugs found and fixed this
+session. Two things to resolve before calling Phase 3 fully closed:
+1. **Subscription-exclusion (§7.4 — "the #1 thing that would annoy a real
+   client").** Needs a new field on the payment contract (e.g.
+   `subscriptionId`, nullable) plus a config flag in `classify.js` to skip
+   `PAYMENT_NO_DEAL` for subscription-renewal charges. This is a
+   `docs/CONTRACT.md` shape change — per CLAUDE.md that's "a conversation, not
+   a commit." Raise it with Ahad before touching the contract; his Stripe
+   fetch node would need to actually populate the field too.
+2. **Zero-amount Stripe validation charges (§7.2).** Stripe creates
+   zero-amount charges for card validation; these should never reach the
+   matcher. Deliberately not implemented — this is Phase 5 fetch-node
+   filtering (vendor-specific), not pure-function scope. Revisit when
+   building the Stripe fetch node.
+3. Once 1 and 2 are resolved (or explicitly deferred to Phase 5/6 in
+   writing), Phase 3 can be called closed. Next actual phase is Phase 4 —
+   `src/format.js` (Murad): exceptions → Slack blocks + Sheet rows. Don't
+   start it before Phase 3 is genuinely closed.
+4. Ahad's seeder (Phase 2) was verified against live Stripe + HubSpot in
+   session 6 — no further re-verification needed.
 
 ## Ideas parked (NOT doing, do not start)
 - Web dashboard — README extensions only
@@ -277,3 +326,5 @@ do not jump to Phase 4.
 | 2026-07-18 | teardown.py refunds Stripe test charges instead of deleting them | Stripe's API has no charge-delete endpoint. Refunding is the closest real cleanup; test-mode charges persisting in the dashboard costs nothing. |
 | 2026-07-18 | DUPLICATE_CHARGE compares an unmatched payment against ALL payments, not just other unmatched ones | The matcher already claims one of the two duplicate charges into `matched`; the leftover has no unmatched twin to compare against, only the winner. |
 | 2026-07-18 | AMOUNT_MISMATCH overrides plain REVIEW when the only amount signal is `amount_within_10pct` | PLAN.md §7.2 states 10% variance is AMOUNT_MISMATCH outright, not a soft REVIEW — confidence banding alone isn't enough, the classifier reads matcher reasons. |
+| 2026-07-18 | Subscription-exclusion (§7.4) deliberately NOT implemented this session | Requires a new field on the payment contract (`subscriptionId`) — a shape change needs both people, per CLAUDE.md. Logged here instead of silently deciding the field name/shape alone. |
+| 2026-07-18 | Zero-amount Stripe validation-charge filtering (§7.2) deliberately NOT implemented this session | Vendor-specific (Stripe-only) and needs a real charge object with a status/type field not yet in the contract — belongs in the Phase 5 Stripe fetch node, not the pure-function matcher/classify. |

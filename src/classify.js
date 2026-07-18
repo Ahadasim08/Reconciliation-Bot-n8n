@@ -20,7 +20,7 @@ export function classify(matchResult, config) {
     const { payment, deal, confidence, reasons } = pair;
     if (payment.refunded && deal.stage === 'closedwon') {
       exceptions.push({ type: 'ORPHAN_REFUND', payment, deal, confidence });
-    } else if (reasons.includes('amount_within_10pct')) {
+    } else if (reasons.includes('amount_within_10pct') || reasons.includes('amount_mismatch')) {
       exceptions.push({ type: 'AMOUNT_MISMATCH', payment, deal, confidence });
     } else if (matchResult.review.includes(pair)) {
       exceptions.push({ type: 'REVIEW', payment, deal, confidence });
@@ -28,7 +28,7 @@ export function classify(matchResult, config) {
   }
 
   for (const deal of matchResult.unmatchedDeals) {
-    if (deal.stage === 'closedwon') {
+    if (deal.stage === 'closedwon' && deal.email) {
       exceptions.push({ type: 'DEAL_NO_PAYMENT', deal });
     }
   }

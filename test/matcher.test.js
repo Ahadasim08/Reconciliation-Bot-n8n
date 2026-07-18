@@ -151,6 +151,57 @@ describe('match — float-safe amount comparison', () => {
   });
 });
 
+describe('match — currency mismatch never silently compares', () => {
+  it('does not match a EUR charge against a USD deal even with identical amount and email', () => {
+    const charge = payment({ email: 'cur@co.com', amount: 1000, currency: 'eur', timestamp: '2026-01-14T10:00:00.000Z' });
+    const d = deal({ email: 'cur@co.com', amount: 1000, currency: 'usd', timestamp: '2026-01-14T00:00:00.000Z' });
+
+    const result = match([charge], [d], {});
+
+    expect(result.matched).toHaveLength(0);
+    expect(result.review).toHaveLength(0);
+    expect(result.unmatchedPayments).toHaveLength(1);
+    expect(result.unmatchedDeals).toHaveLength(1);
+  });
+});
+
+describe('match — amount beyond all tolerance tiers is tagged, not silently dropped', () => {
+  it('a 50% partial payment still pairs via email+timestamp and is tagged amount_mismatch', () => {
+    const charge = payment({ email: 'partial@co.com', amount: 1000, timestamp: '2026-01-14T10:00:00.000Z' });
+    const d = deal({ email: 'partial@co.com', amount: 2000, timestamp: '2026-01-14T00:00:00.000Z' });
+
+    const result = match([charge], [d], {});
+
+    expect(result.review).toHaveLength(1);
+    expect(result.review[0].confidence).toBe(60);
+    expect(result.review[0].reasons).toContain('amount_mismatch');
+  });
+});
+
+describe('match — null deal amount', () => {
+  it('skips amount scoring entirely, does not treat null as 0 or crash', () => {
+    const charge = payment({ email: 'nullamt@co.com', amount: 500, timestamp: '2026-01-14T10:00:00.000Z' });
+    const d = deal({ email: 'nullamt@co.com', amount: null, timestamp: '2026-01-14T00:00:00.000Z' });
+
+    const result = match([charge], [d], {});
+
+    expect(result.review).toHaveLength(1);
+    expect(result.review[0].confidence).toBe(60);
+    expect(result.review[0].reasons).not.toContain('amount_mismatch');
+  });
+});
+
+describe('match — clock skew', () => {
+  it('a charge timestamped in the future is still scored and paired, not dropped', () => {
+    const charge = payment({ email: 'future@co.com', amount: 500, timestamp: '2099-01-01T00:00:00.000Z' });
+    const d = deal({ email: 'future@co.com', amount: 500, timestamp: '2099-01-01T00:04:00.000Z' });
+
+    const result = match([charge], [d], {});
+
+    expect(result.matched).toHaveLength(1);
+  });
+});
+
 describe('match — name-fuzzy fallback when both emails are null', () => {
   it('matches on close name when neither side has an email', () => {
     const charge = payment({ email: null, name: 'Jonathan Doe', amount: 500, timestamp: '2026-01-14T10:00:00.000Z' });

@@ -118,6 +118,15 @@ describe('classify — DEAL_NO_PAYMENT', () => {
 
     expect(exceptions).toHaveLength(0);
   });
+
+  it('skips a closedwon deal with no email instead of flagging it (contact join failed upstream)', () => {
+    const d = deal({ stage: 'closedwon', email: null });
+    const matchResult = { ...emptyMatch, unmatchedDeals: [d] };
+
+    const exceptions = classify(matchResult, {});
+
+    expect(exceptions).toHaveLength(0);
+  });
 });
 
 describe('classify — PAYMENT_NO_DEAL', () => {
@@ -139,6 +148,19 @@ describe('classify — PAYMENT_NO_DEAL', () => {
     const exceptions = classify(matchResult, {});
 
     expect(exceptions[0].unmatchable).toBe(true);
+  });
+});
+
+describe('classify — AMOUNT_MISMATCH for amounts beyond every tolerance tier', () => {
+  it('a review-band pair tagged amount_mismatch (e.g. a 50% partial payment) becomes AMOUNT_MISMATCH', () => {
+    const p = payment({ amount: 1000 });
+    const d = deal({ amount: 2000 });
+    const matchResult = { ...emptyMatch, review: [{ payment: p, deal: d, confidence: 60, reasons: ['email_exact', 'amount_mismatch', 'timestamp_within_24h'] }] };
+
+    const exceptions = classify(matchResult, {});
+
+    expect(exceptions).toHaveLength(1);
+    expect(exceptions[0].type).toBe('AMOUNT_MISMATCH');
   });
 });
 
