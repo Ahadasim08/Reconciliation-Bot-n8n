@@ -1,7 +1,7 @@
 # Progress
 
-**Last updated:** 2026-07-18 by Ahad + Murad (concurrent), session 8
-**Current phase:** 3 CLOSED — 4 IN PROGRESS (Murad, format.js)
+**Last updated:** 2026-07-18 by Murad, session 8
+**Current phase:** 4 CLOSED (Murad, format.js) — next is Phase 5 (assembly, both)
 **Days elapsed:** 2 / 21
 
 ## Phase 0 — 12-check results
@@ -38,15 +38,37 @@ Zero-amount Stripe filtering (§7.2) remains deliberately deferred to Phase 5
 (fetch-node scope, not pure-function). Everything else in §7 that's
 matcher/classify-relevant is covered.
 
-**Phase 4 (outputs, Murad) STARTED this session — `src/format.js` written:**
+**Phase 4 (outputs, Murad) CLOSED this session — `src/format.js` written:**
 `formatSlackMessage` (headline + severity-sorted, capped exception list, posts
 even at zero exceptions per PLAN.md), `formatSheetRows` (exception → sheet row
-shape), `summarize` (the headline's numbers). 14 new tests, 52/52 total.
+shape), `summarize` (the headline's numbers). `docs/CONTRACT.md` updated with
+`format.js`'s output shape so Ahad has it before Phase 5.
+
 Caught and fixed a seam violation before committing — the sheet-row field
-names `stripeLink`/`crmLink` had a vendor string in one of them, renamed both to
-`paymentLink`/`dealLink`. `docs/CONTRACT.md` updated with `format.js`'s output
-shape so Ahad has it before Phase 5. Not yet done: Postgres upsert / Sheet-row
-idempotency — that's Phase 5 wiring, not `format.js`'s job.
+names `stripeLink`/`crmLink` had a vendor string in one of them, renamed both
+to `paymentLink`/`dealLink`. A background security review of the push then
+caught two real bugs that slipped past that first pass: CSV formula
+injection (a customer name starting with `=`/`+`/`-`/`@` runs as a formula
+when the Sheet is opened) and Slack mrkdwn injection (unescaped `&`/`<`/`>`
+in a customer name can forge a fake link or break block rendering). Both are
+attacker-influenceable — the name is whatever the customer typed at
+checkout. Fixed: sheet rows prefix a leading quote on formula-looking
+values, Slack lines escape mrkdwn's three special characters. 3 more tests.
+
+Resolved the one deliberately-open design question (PLAN.md §6's "decide
+explicitly" on the `resolved` flag): report-only for now — the Sheet
+checkbox is a human todo marker, not read back by the system, so an
+exception re-fires nightly regardless until the underlying Stripe/HubSpot
+data actually changes. Logged in Decisions log, noted inline in `format.js`.
+Honouring it for real needs Phase 5/6 plumbing (Postgres mirrors resolved,
+or the workflow reads the Sheet back) that doesn't exist yet.
+
+21 new tests this phase, 55/55 total. Seam check
+(`grep -ri "hubspot\|stripe"` across `matcher.js`/`classify.js`/`format.js`)
+still clean. Not yet done, correctly out of `format.js`'s scope: Postgres
+upsert / Sheet-row idempotency (Phase 5 n8n-node wiring) and Slack
+block-kit's real 50-blocks-per-message limit (verify once the HTTP node
+exists in Phase 5).
 
 Detail on the matcher/classify work from session 7:
 `src/normalize.js` (email lowercase/trim/plus-strip without dot-stripping,
@@ -126,8 +148,13 @@ it's always `null` in fixtures, a no-op for the exclusion logic. 3 new tests.
       off). Zero-amount Stripe charge filtering explicitly deferred to Phase 5.
       **Phase 3 CLOSED.**
 - [x] src/format.js — formatSlackMessage, formatSheetRows, summarize —
-      14 tests
+      17 tests, plus CSV-formula-injection and Slack-mrkdwn-injection fixes
+      caught by security review (4 more tests)
 - [x] docs/CONTRACT.md — added format.js output shape addendum
+- [x] `resolved`-flag semantics decided: report-only (see Decisions log)
+- [x] Phase 4 exit — **CLOSED.** Postgres upsert double-Execute idempotency
+      is Phase 5 territory (needs real nodes), everything within
+      `format.js`'s own scope is done and tested.
 
 ## Session log
 ### Session 1 — 2026-07-17
@@ -379,30 +406,24 @@ it's always `null` in fixtures, a no-op for the exclusion logic. 3 new tests.
 None.
 
 ## Next session — start here
-Phase 3 CLOSED (both subscription-exclusion and the matcher/classify audit
-resolved). Phase 4 (`src/format.js`, Murad) is started — core functions
-written and tested. Remaining Phase 4 work:
-1. **Wire real Slack block-kit constraints** — current `formatSlackMessage`
-   output is section blocks only; confirm against Slack's actual block-kit
-   limits (50 blocks/message) once the HTTP node is built in Phase 5, not
-   before.
-2. ~~Decide `resolved`-flag semantics~~ — DECIDED (see Decisions log):
-   report-only for now. `resolved` is a human todo-list checkbox with no
-   system meaning; exceptions re-fire every night regardless until the
-   underlying Stripe/HubSpot data actually changes. Revisit honouring it
-   after Phase 5 ships.
-3. One item carried over from Phase 3, still deliberately deferred (not
-   blocking, revisit when its owning phase starts): zero-amount Stripe
-   validation charges (§7.2) — Phase 5 fetch-node filtering.
-4. Once Phase 4's remaining pieces above are addressed (or explicitly
-   deferred), Phase 4 exit criteria per PLAN.md: Postgres upsert tested by
-   clicking Execute twice, confirming counts don't double — that's Phase 5
-   territory once real nodes exist, not something `format.js` alone can prove.
-5. Ahad's seeder (Phase 2) was verified against live Stripe + HubSpot in
+**Phase 4 CLOSED.** Next is Phase 5 — Assembly (both, together, per PLAN.md).
+The two halves meet: Ahad's fetch nodes feed Murad's Code nodes for the first
+real end-to-end run against seeded data.
+1. Ahad's n8n canvas nodes 1-6 (trigger through merge) were held pending
+   `format.js` — clear to start/continue now.
+2. `build/inject.js` needs `format.js` in the workflow's Code node mapping —
+   wire it in alongside `normalize.js`/`matcher.js`/`classify.js`.
+3. Two things carried into Phase 5 as fetch-node-scope work, not forgotten:
+   zero-amount Stripe validation-charge filtering (§7.2), and populating the
+   real `subscriptionId` value from the Stripe API.
+4. Verify `formatSlackMessage`'s block-kit output against Slack's real
+   50-blocks-per-message limit once the HTTP node exists.
+5. Phase 5 exit criteria per PLAN.md: seeded data in → exactly the exceptions
+   in `expected.json` out, run twice → same count (this is where the
+   `resolved`-flag report-only decision and Postgres upsert idempotency
+   actually get exercised for the first time).
+6. Ahad's seeder (Phase 2) was verified against live Stripe + HubSpot in
    session 6 — no further re-verification needed.
-6. Ahad has n8n canvas nodes 1-6 (trigger through merge) fair game to build
-   solo ahead of Phase 5 per PLAN §5's risk register, but is holding off
-   until `format.js` is fully done — coordinate before he starts.
 
 ## Ideas parked (NOT doing, do not start)
 - Web dashboard — README extensions only
