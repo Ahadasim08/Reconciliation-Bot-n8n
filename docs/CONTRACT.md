@@ -87,6 +87,34 @@ table's `exception_type` column (`db/schema.sql`).
 
 ---
 
+## Output shape (Murad's format.js produces)
+
+`src/format.js` takes matcher output + classify's exceptions, no I/O of its own.
+
+```js
+formatSlackMessage(matchResult, exceptions, config) -> {
+  blocks: [ /* Slack block-kit sections: headline, then up to config.maxExceptionsInMessage
+              exception lines sorted by severity, then "...and N more, see sheet." if capped */ ]
+}
+
+formatSheetRows(exceptions) -> [{
+  date, type, amount, customer, email, confidence,  // confidence is null for unmatched-only exceptions
+  paymentLink,                                       // exception.payment.url, or null (DEAL_NO_PAYMENT has no payment)
+  dealLink,                                          // exception.deal.url, or null (PAYMENT_NO_DEAL/DUPLICATE_CHARGE have no deal)
+  resolved: false,                                   // n8n/Postgres owns flipping this true, format.js never does
+}]
+
+summarize(matchResult, exceptions) -> { totalPayments, cleanCount, exceptionCount, unreconciledAmount }
+```
+
+- Severity order for the Slack message: `DUPLICATE_CHARGE`, `PAYMENT_NO_DEAL` first
+  (money is wrong right now), `REVIEW` last. Zero exceptions still produces a headline
+  block — a silent bot is indistinguishable from a broken bot.
+- Sheet-row and Postgres-row idempotency (skip-if-exists, upsert keys) is Phase 5
+  wiring, not `format.js`'s job — it always emits one row per exception it's given.
+
+---
+
 ## Contract rules — no exceptions
 
 - **Money is always a number in dollars.** Stripe gives cents, HubSpot gives a

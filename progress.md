@@ -1,7 +1,7 @@
 # Progress
 
-**Last updated:** 2026-07-18 by Ahad, session 8
-**Current phase:** 3 CLOSED — next is Phase 4 (format.js, Murad)
+**Last updated:** 2026-07-18 by Ahad + Murad (concurrent), session 8
+**Current phase:** 3 CLOSED — 4 IN PROGRESS (Murad, format.js)
 **Days elapsed:** 2 / 21
 
 ## Phase 0 — 12-check results
@@ -31,8 +31,24 @@ HubSpot shows 45 tagged deals and 45 tagged contacts. Both cross-checked
 directly against the live APIs (not just trusted from `expected.json`) and
 match it exactly.**
 
-**Phase 3 (normalize + matcher, Murad) IN PROGRESS, substantial progress this
-session.** All against fixtures only, no waiting on Ahad, per PLAN.md §6. Built:
+**Phase 3 (normalize + matcher, Murad + Ahad) CLOSED this session.**
+Subscription-exclusion (§7.4) resolved — `subscriptionId` added to the
+contract, `classify.js` skips `PAYMENT_NO_DEAL` for renewals, config-gated.
+Zero-amount Stripe filtering (§7.2) remains deliberately deferred to Phase 5
+(fetch-node scope, not pure-function). Everything else in §7 that's
+matcher/classify-relevant is covered.
+
+**Phase 4 (outputs, Murad) STARTED this session — `src/format.js` written:**
+`formatSlackMessage` (headline + severity-sorted, capped exception list, posts
+even at zero exceptions per PLAN.md), `formatSheetRows` (exception → sheet row
+shape), `summarize` (the headline's numbers). 14 new tests, 52/52 total.
+Caught and fixed a seam violation before committing — the sheet-row field
+names `stripeLink`/`crmLink` had a vendor string in one of them, renamed both to
+`paymentLink`/`dealLink`. `docs/CONTRACT.md` updated with `format.js`'s output
+shape so Ahad has it before Phase 5. Not yet done: Postgres upsert / Sheet-row
+idempotency — that's Phase 5 wiring, not `format.js`'s job.
+
+Detail on the matcher/classify work from session 7:
 `src/normalize.js` (email lowercase/trim/plus-strip without dot-stripping,
 Stripe-cents/HubSpot-string amount coercion, epoch-seconds/epoch-millis
 timestamp → UTC ISO8601), `src/matcher.js` (replaced the stub — real
@@ -109,6 +125,9 @@ it's always `null` in fixtures, a no-op for the exclusion logic. 3 new tests.
       scope. Subscription-exclusion resolved (contract updated, both signed
       off). Zero-amount Stripe charge filtering explicitly deferred to Phase 5.
       **Phase 3 CLOSED.**
+- [x] src/format.js — formatSlackMessage, formatSheetRows, summarize —
+      14 tests
+- [x] docs/CONTRACT.md — added format.js output shape addendum
 
 ## Session log
 ### Session 1 — 2026-07-17
@@ -313,6 +332,35 @@ it's always `null` in fixtures, a no-op for the exclusion logic. 3 new tests.
   §5's risk register — "moves to Phase 6 hardening prep and INSTALL.md
   early" — but not started this session).
 
+### Session 8 — 2026-07-18 (Murad, concurrent with Ahad above)
+- Reviewed session 7's two open Phase 3 items (subscription-exclusion,
+  zero-amount filtering) with the user — both stay deliberately deferred
+  (cross-team contract change / Phase 5 scope respectively), nothing new to
+  resolve. Formally closed Phase 3 on that basis.
+- Started Phase 4: wrote `src/format.js` — `formatSlackMessage` (headline
+  string, severity-sorted exception lines capped at `config.maxExceptionsInMessage`
+  with a "…and N more, see sheet" line, always posts even at zero exceptions
+  per PLAN.md's "silent bot is a broken bot" rule), `formatSheetRows`
+  (exception → sheet row shape: date/type/amount/customer/email/confidence/
+  paymentLink/dealLink/resolved), `summarize` (totals + unreconciled-amount
+  math shared by both).
+- Caught a seam violation before committing: the sheet row's link fields were
+  named `stripeLink`/`crmLink` — `stripeLink` put a vendor string directly
+  into `format.js`, which CLAUDE.md forbids. Renamed both to
+  `paymentLink`/`dealLink`. Re-ran the `grep -ri "hubspot|stripe"` seam check
+  against all three files (`matcher.js`, `classify.js`, `format.js`) — clean.
+- Wrote `test/format.test.js` — 14 tests (zero-exception headline, severity
+  ordering, cap-and-truncate message, sheet row shape for payment+deal /
+  payment-only / deal-only exceptions). `npm test` → 52/52 passing.
+- Updated `docs/CONTRACT.md` with `format.js`'s output shape (Slack blocks +
+  sheet row shape) so Ahad has it ahead of Phase 5 assembly.
+- Did not touch: Postgres upsert logic or Sheet-level idempotency (same
+  charge_id+type skip) — that's Phase 5 n8n-node wiring, not `format.js`'s
+  job; `format.js` always emits exactly one row per exception it's handed.
+- Note: written against the 41-test base from session 7, before Ahad's
+  concurrent subscription-exclusion push (44 tests) merged in — see combined
+  count in Status above and re-run after this merge.
+
 ## Problems solved (never re-solve these)
 | Problem | Cause | Fix |
 |---|---|---|
@@ -331,20 +379,29 @@ it's always `null` in fixtures, a no-op for the exclusion logic. 3 new tests.
 None.
 
 ## Next session — start here
-**Phase 3 CLOSED.** Next is Phase 4 (Murad): `src/format.js` — exceptions →
-Slack blocks + Sheet rows, per PLAN.md §6 Phase 4:
-1. Headline format: `N payments · M clean · X exceptions · $Y unreconciled`.
-   Zero exceptions still posts (a silent bot looks broken).
-2. Cap at 10 exceptions in the Slack message, then "…and N more, see sheet."
-3. Severity ordering: `DUPLICATE_CHARGE` and `PAYMENT_NO_DEAL` first, `REVIEW`
-   last.
-4. Sheet rows: date, type, amount, customer, email, confidence, Stripe link,
-   CRM link, resolved checkbox. Append-only, skip if a row already exists for
-   the same `charge_id` + `type` (Sheet-level idempotency).
-5. Remember: zero-amount Stripe charge filtering is still deferred to Phase 5
-   (Ahad's fetch node) — not forgotten, just not pure-function scope.
-6. One phase per session — don't start Phase 5 (assembly) even if there's
-   time left.
+Phase 3 CLOSED (both subscription-exclusion and the matcher/classify audit
+resolved). Phase 4 (`src/format.js`, Murad) is started — core functions
+written and tested. Remaining Phase 4 work:
+1. **Wire real Slack block-kit constraints** — current `formatSlackMessage`
+   output is section blocks only; confirm against Slack's actual block-kit
+   limits (50 blocks/message) once the HTTP node is built in Phase 5, not
+   before.
+2. **Decide `resolved`-flag semantics for real** — PLAN.md §6 flags this
+   ("exception resolved in the Sheet, still exists in the data — decide
+   explicitly"). `format.js` currently always emits `resolved: false`; the
+   actual honour-or-ignore decision is Phase 5/6, needs both people.
+3. One item carried over from Phase 3, still deliberately deferred (not
+   blocking, revisit when its owning phase starts): zero-amount Stripe
+   validation charges (§7.2) — Phase 5 fetch-node filtering.
+4. Once Phase 4's remaining pieces above are addressed (or explicitly
+   deferred), Phase 4 exit criteria per PLAN.md: Postgres upsert tested by
+   clicking Execute twice, confirming counts don't double — that's Phase 5
+   territory once real nodes exist, not something `format.js` alone can prove.
+5. Ahad's seeder (Phase 2) was verified against live Stripe + HubSpot in
+   session 6 — no further re-verification needed.
+6. Ahad has n8n canvas nodes 1-6 (trigger through merge) fair game to build
+   solo ahead of Phase 5 per PLAN §5's risk register, but is holding off
+   until `format.js` is fully done — coordinate before he starts.
 
 ## Ideas parked (NOT doing, do not start)
 - Web dashboard — README extensions only
