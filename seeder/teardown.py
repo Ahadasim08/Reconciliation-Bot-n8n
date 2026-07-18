@@ -80,7 +80,8 @@ def find_seed_contacts(token):
 def find_seed_charges():
     charges = []
     for charge in stripe.Charge.list(limit=100).auto_paging_iter():
-        if charge.metadata.get("seed", "").startswith(SEED_TAG_PREFIX.rstrip("-")):
+        md = charge["metadata"]
+        if "seed" in md and md["seed"].startswith(SEED_TAG_PREFIX.rstrip("-")):
             charges.append(charge)
     return charges
 
@@ -107,7 +108,7 @@ def run(dry_run):
     for c in contacts:
         hubspot_request(hs_token, "DELETE", f"/crm/v3/objects/contacts/{c['id']}")
     for charge in charges:
-        if not charge.refunded:
+        if charge.paid and not charge.refunded:
             stripe.Refund.create(charge=charge.id)
 
     print(f"deleted {len(deals)} deals, {len(contacts)} contacts; refunded unrefunded seed charges")
