@@ -23,8 +23,8 @@ test, same day. (Source of truth: PLAN.md section 2.)
   amount: 2000.00,                        // DOLLARS as a number, never cents, never string
   currency: "usd",
   timestamp: "2026-01-14T10:14:32.000Z",  // ALWAYS UTC ISO8601
-  refunded: false,
-  refundedAmount: 0.00,
+  refunded: false,                        // true ONLY when the FULL amount was refunded
+  refundedAmount: 0.00,                   // can be > 0 while refunded is still false (partial)
   url: "https://dashboard.stripe.com/test/payments/ch_3Ox1a2B..."
 }
 ```
@@ -100,6 +100,15 @@ table's `exception_type` column (`db/schema.sql`).
 - **The matcher must not know which CRM the deal came from.** If `matcher.js`,
   `classify.js`, or `format.js` contains the string "hubspot" / "stripe" / any
   vendor name, the seam is broken.
+- **`refunded` means fully refunded, full stop.** This mirrors Stripe's own
+  `charge.refunded` field: it is `true` only when the entire charge amount has
+  been refunded. A partial refund leaves `refunded: false` with
+  `refundedAmount` set to whatever was returned (e.g. `refunded: false,
+  refundedAmount: 500.00` on a $2,000 charge). `classify.js`'s `ORPHAN_REFUND`
+  check relies on this: it fires on `refunded === true`, not on
+  `refundedAmount > 0`. A partial refund on an otherwise-matching charge is
+  **not** an orphan — it's a clean match, full stop, in v1 (no `partial_refund`
+  annotation yet; see PLAN.md §7.4, parked as a Phase 4 `format.js` decision).
 
 ---
 
@@ -107,3 +116,16 @@ table's `exception_type` column (`db/schema.sql`).
 
 - [x] Ahad — upstream produces these shapes
 - [x] Murad — downstream consumes these shapes
+
+### Addendum — 2026-07-18 (Murad)
+
+Added the `refunded`/`refundedAmount` semantics above. This wasn't previously
+spelled out and caused a real disagreement between two independently-written
+`classify.js` versions this session (see git history around commit `cf78067`)
+— one assumed `refunded: true` could still mean partial, the other assumed
+Stripe's real semantics (full-refund-only). Documenting the latter since it's
+what Stripe's actual API does and what `db/schema.sql` / the seeder already
+assume implicitly.
+
+- [ ] Ahad — confirm this matches what the seeder/Stripe fetch node actually
+      produce (a partial refund should leave `refunded: false`)
