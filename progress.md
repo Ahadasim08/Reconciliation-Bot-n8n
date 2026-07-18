@@ -1,8 +1,8 @@
 # Progress
 
-**Last updated:** 2026-07-17 by Ahad, session 4
-**Current phase:** 1 — foundations
-**Days elapsed:** 1 / 21
+**Last updated:** 2026-07-18 by Ahad, session 5
+**Current phase:** 1 CLOSED — next is Phase 2 (seeder)
+**Days elapsed:** 2 / 21
 
 ## Phase 0 — 12-check results
 Ahad ran the upstream checks 2026-07-17 (Stripe test mode, HubSpot free tier private
@@ -24,23 +24,24 @@ app, Slack incoming webhook, Google Sheets via service account).
 | 12 | Re-import the exported JSON: still works | Murad | PASS | |
 
 ## Status
-Phase 0 CLOSED — all 12 checks passed. Phase 1 nearly closed. Murad's half done
-(session 3): `package.json` + Vitest (`npm test` green, 3 tests),
-`test/fixtures/clean.json` (7 charges / 6 deals, David Reyes `ch_007` deliberately
-unmatched), `src/matcher.js` stub (`match(payments, deals, config)` → empty
-four-bucket shape), `build/inject.js` (`injectCode(workflow, mappings)`, proven
-against the real Phase 0 export at `test/fixtures/n8n-code-node-export.json`).
-Ahad's half done (session 4): `db/schema.sql` (runs/exceptions/matches with the
-UNIQUE idempotency key + CHECK constraints on the 5 exception types), `.env.example`
-(all 4 creds documented), and `docs/CONTRACT.md` (the frozen data-shape agreement,
-transcribed from PLAN.md §2, matched to clean.json + matcher.js). `spike/` deleted.
-`npm test` still green (3/3).
+Phase 0 CLOSED — all 12 checks passed. **Phase 1 CLOSED (session 5).** All three
+exit criteria met: (a) `db/schema.sql` loaded into the running Postgres (persists
+in the `postgres_data` named volume); (b) all 4 API credentials stored in n8n's
+credential store (Stripe `sk_test_`, HubSpot `pat-`, Google Sheets service-account
+JSON; Slack is an incoming-webhook URL held for the HTTP node later, not a stored
+credential); (c) `docs/CONTRACT.md` signed off by BOTH — Murad reviewed, both boxes
+checked. Docker got installed on Ahad's machine this session, which unblocked (a)+(b).
 
-Three things remain to fully close Phase 1, all needing the live n8n environment
-(Docker is NOT installed on Ahad's machine — Murad has the container env): (a) load
-`db/schema.sql` into the running Postgres; (b) store the 4 API credentials in n8n's
-credential store via the UI; (c) both sign off on `docs/CONTRACT.md` (checkboxes
-still unchecked). Until those close, DO NOT start Phase 2 (seeder).
+Murad's half was done in session 3: `package.json` + Vitest (`npm test` green, 3
+tests), `test/fixtures/clean.json` (7 charges / 6 deals, David Reyes `ch_007`
+deliberately unmatched), `src/matcher.js` stub (`match(payments, deals, config)` →
+empty four-bucket shape), `build/inject.js` (`injectCode(workflow, mappings)`,
+proven against the real Phase 0 export at `test/fixtures/n8n-code-node-export.json`).
+Ahad's half was done sessions 4-5: `db/schema.sql`, `.env.example`, `docs/CONTRACT.md`.
+`spike/` deleted. `npm test` still green (3/3).
+
+Foundations are done. Next session opens Phase 2 — the seeder (Ahad, upstream) —
+and Phase 3 — the matcher (Murad, downstream). One phase per session.
 
 ## Done
 - [x] docker-compose.yml written (n8n + Postgres)
@@ -59,9 +60,9 @@ still unchecked). Until those close, DO NOT start Phase 2 (seeder).
 - [x] .env.example — all 4 credentials documented
 - [x] docs/CONTRACT.md — written, transcribed from PLAN.md §2 (sign-off pending)
 - [x] spike/ deleted (Phase 0 throwaway)
-- [ ] Load db/schema.sql into running Postgres (needs Docker/n8n up)
-- [ ] 4 credentials stored in n8n credential store (manual UI, needs n8n up)
-- [ ] docs/CONTRACT.md signed off by BOTH (Phase 1 exit criterion)
+- [x] Load db/schema.sql into running Postgres (done S5, persists in volume)
+- [x] 4 credentials stored in n8n credential store (done S5, manual UI)
+- [x] docs/CONTRACT.md signed off by BOTH (done S5 — Murad reviewed, both boxes checked)
 
 ## Session log
 ### Session 1 — 2026-07-17
@@ -114,29 +115,49 @@ still unchecked). Until those close, DO NOT start Phase 2 (seeder).
   Murad's lockfile intact.
 - Committed + pushed (12fe273). Repo pushed to github.com/Ahadasim08/Reconciliation-Bot-n8n.
 
+### Session 5 — 2026-07-18 (Ahad)
+- Installed Docker Desktop on Ahad's machine — the blocker from S4. Brought the
+  stack up (n8n + Postgres at :5678), loaded `db/schema.sql` into the running
+  Postgres (runs/exceptions/matches tables created, persist in `postgres_data`).
+- Stored all 4 API credentials via the n8n UI: Stripe (`sk_test_`), HubSpot
+  (`pat-`), Google Sheets (service-account JSON). Slack is an incoming-webhook URL,
+  saved for the HTTP node in Phase 4/5 — not a stored credential type.
+- HubSpot detour: private apps were moved into the "Legacy Apps" area of the new
+  developer platform. Old Phase 0 app was gone; created a fresh one with scopes
+  `crm.objects.deals.read` + `crm.objects.contacts.read`, copied the `pat-` token.
+- Murad reviewed `docs/CONTRACT.md`; both sign-off boxes checked. Fixed an
+  accidental broken-line edit (`clean.jso` → `clean.json`). **Phase 1 CLOSED.**
+- Caught + reverted real API keys accidentally pasted into `.env.example` (a
+  git-TRACKED file) before any commit — see Problems solved. No exposure.
+- On push, Murad had concurrently pushed his own sign-off (`de1b0e5`) plus a
+  package-lock version fix (`bb8d3ba`, resolving the parked 0.1.0/1.0.0 mismatch).
+  Rebased Ahad's close-out on top; resolved the CONTRACT sign-off conflict to both
+  boxes checked.
+
 ## Problems solved (never re-solve these)
 | Problem | Cause | Fix |
 |---|---|---|
 | `git push` → 403 "denied to ai-and-beyond" | Windows credential manager cached a different GitHub account | Push via gh's helper: `git -c credential.helper= -c credential.https://github.com.helper='!gh auth git-credential' push`. Long-term: clear the stale cred from Windows Credential Manager. |
 | `npm install` rewrites package-lock.json | npm prunes other-platform optional native deps on install | Don't commit that diff — `git checkout -- package-lock.json`. Lockfile stays cross-platform. |
+| Real API keys pasted into `.env.example` | `.env.example` is git-TRACKED (`.gitignore` allows it via `!.env.example`) — it's the placeholder template, not a secret file | `git checkout -- .env.example` to restore `xxx` placeholders BEFORE commit. Real keys live only in n8n's credential store. Caught pre-commit S5, never pushed, no rotation needed. If the editor tab still holds them, close without saving. |
 
 ## Blockers
-| Blocker | Owner | Since | Needs |
-|---|---|---|---|
-| Can't load schema / store n8n creds / run n8n locally | Ahad | S4 | Docker Desktop on Ahad's machine, OR do these on Murad's n8n instance |
-| CONTRACT.md not signed off | Both | S4 | Murad reads it, confirms downstream consumes these exact shapes |
+None. (S4 blockers resolved S5: Docker installed → schema + creds done; CONTRACT
+signed off by both.)
 
 ## Next session — start here
-1. Finish closing Phase 1 (needs live n8n — Murad's box or install Docker on Ahad's):
-   - Load `db/schema.sql` into the running Postgres.
-   - Store the 4 API credentials (Stripe / HubSpot / Slack / Sheets) in n8n's
-     credential store via the UI. Never in the repo.
-   - Murad reviews `docs/CONTRACT.md` and both check the sign-off boxes. This is
-     the Phase 1 exit criterion.
-2. Minor: reconcile the package.json (0.1.0) vs package-lock.json (1.0.0) version
-   mismatch (Murad's files).
-3. ONLY after all of the above: begin Phase 2 (seeder — Ahad) / Phase 3 (matcher —
-   Murad). One phase per session. Do NOT start Phase 2 while Phase 1 sign-off is open.
+Phase 1 is CLOSED. This session is **Phase 2 — the seeder (Ahad, upstream).**
+1. Read PLAN.md for the Phase 2 scope before writing any code. The seeder creates
+   deterministic test data across Stripe + HubSpot that the matcher can later
+   reconcile — the 7-payments / 6-deals shape from `test/fixtures/clean.json`,
+   including the deliberate exceptions (unmatched charge, etc.).
+2. Everything the seeder produces must obey `docs/CONTRACT.md` (dollars-as-number,
+   lowercased/plus-stripped emails, UTC ISO8601, url always populated, null for
+   missing). The seeder is the upstream that feeds those exact shapes.
+3. Real keys are in n8n's credential store already. Never put them in the repo.
+   `.env.example` stays placeholder-only.
+4. One phase per session — do Phase 2 only. Note Phase 3 (matcher — Murad) as the
+   next one; don't start it.
 
 ## Ideas parked (NOT doing, do not start)
 - Web dashboard — README extensions only
