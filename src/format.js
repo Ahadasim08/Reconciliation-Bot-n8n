@@ -97,7 +97,7 @@ export function formatSheetRows(exceptions) {
       confidence: exception.confidence != null ? exception.confidence : null,
       paymentLink: exception.payment ? exception.payment.url : null,
       dealLink: exception.deal ? exception.deal.url : null,
-      resolved: false,
+      resolved: false, // report-only: this bot never reads the checkbox back, decision logged in progress.md
     };
   });
 }

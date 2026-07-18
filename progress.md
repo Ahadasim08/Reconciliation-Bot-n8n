@@ -386,10 +386,11 @@ written and tested. Remaining Phase 4 work:
    output is section blocks only; confirm against Slack's actual block-kit
    limits (50 blocks/message) once the HTTP node is built in Phase 5, not
    before.
-2. **Decide `resolved`-flag semantics for real** — PLAN.md §6 flags this
-   ("exception resolved in the Sheet, still exists in the data — decide
-   explicitly"). `format.js` currently always emits `resolved: false`; the
-   actual honour-or-ignore decision is Phase 5/6, needs both people.
+2. ~~Decide `resolved`-flag semantics~~ — DECIDED (see Decisions log):
+   report-only for now. `resolved` is a human todo-list checkbox with no
+   system meaning; exceptions re-fire every night regardless until the
+   underlying Stripe/HubSpot data actually changes. Revisit honouring it
+   after Phase 5 ships.
 3. One item carried over from Phase 3, still deliberately deferred (not
    blocking, revisit when its owning phase starts): zero-amount Stripe
    validation charges (§7.2) — Phase 5 fetch-node filtering.
@@ -422,3 +423,4 @@ written and tested. Remaining Phase 4 work:
 | 2026-07-18 | Subscription-exclusion (§7.4) deliberately NOT implemented this session | Requires a new field on the payment contract (`subscriptionId`) — a shape change needs both people, per CLAUDE.md. Logged here instead of silently deciding the field name/shape alone. |
 | 2026-07-18 | Zero-amount Stripe validation-charge filtering (§7.2) deliberately NOT implemented this session | Vendor-specific (Stripe-only) and needs a real charge object with a status/type field not yet in the contract — belongs in the Phase 5 Stripe fetch node, not the pure-function matcher/classify. |
 | 2026-07-18 | Added `subscriptionId` (nullable) to the payment contract shape | Only way `classify.js` can distinguish a subscription renewal from a genuine untracked payment. Agreed live between Ahad and Murad, both signed off in `docs/CONTRACT.md`. Populating the real value is Ahad's Phase 5 fetch-node work. |
+| 2026-07-18 | `resolved` flag is report-only for now, not honoured | PLAN.md §6 requires deciding explicitly rather than letting it default silently. Honouring it means the Sheet's checkbox suppresses re-firing the same exception — needs a read-back-the-Sheet or Postgres-mirrors-resolved design, which is Phase 5/6 plumbing that doesn't exist yet. Simpler default: every exception re-fires nightly until the underlying Stripe/HubSpot data actually changes; the checkbox is just a human todo marker. Revisit after Phase 5 ships. |
