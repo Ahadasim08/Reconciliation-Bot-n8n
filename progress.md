@@ -1,7 +1,7 @@
 # Progress
 
-**Last updated:** 2026-07-18 by Ahad, session 5
-**Current phase:** 1 CLOSED — next is Phase 2 (seeder)
+**Last updated:** 2026-07-18 by Murad, session 6
+**Current phase:** 2 CLOSED (Ahad) — 3 IN PROGRESS (Murad, matcher)
 **Days elapsed:** 2 / 21
 
 ## Phase 0 — 12-check results
@@ -24,24 +24,31 @@ app, Slack incoming webhook, Google Sheets via service account).
 | 12 | Re-import the exported JSON: still works | Murad | PASS | |
 
 ## Status
-Phase 0 CLOSED — all 12 checks passed. **Phase 1 CLOSED (session 5).** All three
-exit criteria met: (a) `db/schema.sql` loaded into the running Postgres (persists
-in the `postgres_data` named volume); (b) all 4 API credentials stored in n8n's
-credential store (Stripe `sk_test_`, HubSpot `pat-`, Google Sheets service-account
-JSON; Slack is an incoming-webhook URL held for the HTTP node later, not a stored
-credential); (c) `docs/CONTRACT.md` signed off by BOTH — Murad reviewed, both boxes
-checked. Docker got installed on Ahad's machine this session, which unblocked (a)+(b).
+Phase 0 and Phase 1 CLOSED (see prior sessions). **Phase 2 (seeder) CLOSED —
+Ahad pushed `seeder/scenarios.py`, `seed.py`, `teardown.py`, `expected.json`
+(commit 752fd5e, "verified expected.json"), pulled clean, fast-forward, no
+conflicts.** Exit criteria (real run against Stripe+HubSpot, `expected.json`
+generated) taken as met per Ahad's commit message — not independently
+re-verified by Murad this session.
 
-Murad's half was done in session 3: `package.json` + Vitest (`npm test` green, 3
-tests), `test/fixtures/clean.json` (7 charges / 6 deals, David Reyes `ch_007`
-deliberately unmatched), `src/matcher.js` stub (`match(payments, deals, config)` →
-empty four-bucket shape), `build/inject.js` (`injectCode(workflow, mappings)`,
-proven against the real Phase 0 export at `test/fixtures/n8n-code-node-export.json`).
-Ahad's half was done sessions 4-5: `db/schema.sql`, `.env.example`, `docs/CONTRACT.md`.
-`spike/` deleted. `npm test` still green (3/3).
+**Phase 3 (normalize + matcher, Murad) IN PROGRESS, substantial progress this
+session.** All against fixtures only, no waiting on Ahad, per PLAN.md §6. Built:
+`src/normalize.js` (email lowercase/trim/plus-strip without dot-stripping,
+Stripe-cents/HubSpot-string amount coercion, epoch-seconds/epoch-millis
+timestamp → UTC ISO8601), `src/matcher.js` (replaced the stub — real
+score-all-pairs → sort-desc → greedy-claim algorithm, so Mike's two-charges-
+one-deal case resolves correctly instead of first-match-wins), `src/classify.js`
+(new — matcher output → the 5 exception types + REVIEW, including
+DUPLICATE_CHARGE detection across the full payment set post-matching, and
+AMOUNT_MISMATCH overriding plain REVIEW when the amount reason is only
+`amount_within_10pct` rather than exact/fee-adjusted).
 
-Foundations are done. Next session opens Phase 2 — the seeder (Ahad, upstream) —
-and Phase 3 — the matcher (Murad, downstream). One phase per session.
+35/35 tests passing (`npm test`). Seam check clean: `grep -ri "hubspot\|stripe"`
+returns nothing in `matcher.js` or `classify.js`. Not yet formally "done" against
+the full §7 catalogue — several rows (currency-mismatch filtering, zero-amount
+Stripe validation charges, pagination, rate-limit backoff, window-boundary
+inclusivity) are operational/upstream concerns for Phase 5/6, not pure-function
+matcher/classify work, and were deliberately left out this session.
 
 ## Done
 - [x] docker-compose.yml written (n8n + Postgres)
@@ -64,6 +71,13 @@ and Phase 3 — the matcher (Murad, downstream). One phase per session.
 - [x] 4 credentials stored in n8n credential store (done S5, manual UI)
 - [x] docs/CONTRACT.md signed off by BOTH (done S5 — Murad reviewed, both boxes checked)
 - [x] package.json/package-lock.json version mismatch fixed (S5, bb8d3ba)
+- [x] Phase 2 — seeder: scenarios.py, seed.py, teardown.py, expected.json (Ahad, 752fd5e)
+- [x] src/normalize.js — normalizeEmail/normalizeAmount/normalizeTimestamp, 12 tests
+- [x] src/matcher.js — real scoring + greedy pair assignment (was stub), 12 tests
+- [x] src/classify.js — matcher output → 5 exception types + REVIEW, 11 tests
+- [ ] Phase 3 exit criteria (≥20 tests covering all of §7) — 35 tests written,
+      core matcher/classify cases covered; several §7 rows are Phase 5/6 scope
+      (pagination, rate limits, currency filtering) — NOT DONE, revisit next session
 
 ## Session log
 ### Session 1 — 2026-07-17
@@ -146,6 +160,41 @@ and Phase 3 — the matcher (Murad, downstream). One phase per session.
   of Ahad's; resolved in favor of Ahad's fuller close-out, folding in the
   package-lock fix.
 
+### Session 6 — 2026-07-18 (Murad)
+- Pulled Ahad's Phase 2 seeder push (752fd5e) at session start — fast-forward,
+  no conflicts with the untracked files already being worked on.
+- `src/normalize.js`: `normalizeEmail` (trim → lowercase → strip plus-tag,
+  deliberately does NOT strip dots per PLAN.md §7.1), `normalizeAmount`
+  (Stripe cents / HubSpot string → dollars number, null passes through as
+  null, never coerced to 0), `normalizeTimestamp` (Stripe epoch-seconds /
+  HubSpot epoch-millis → UTC ISO8601). 12 tests.
+- `src/matcher.js`: replaced the Phase 1 stub with the real algorithm from
+  PLAN.md §6 — score every payment against candidate deals (same normalized
+  email, or name-fuzzy only when both sides lack an email), sort all pairs by
+  score descending, greedily claim. Fixes the Mike two-charges-one-deal case:
+  the losing charge now falls through to the classifier as a candidate
+  duplicate instead of the matcher wrongly calling it unmatched-and-done.
+  Scoring config (thresholds, points per signal) is fully in `config`, merged
+  over defaults — no magic numbers in the function body. 12 tests, including
+  the Jenna fee-tolerance case (confidence exactly 85, matching PLAN's worked
+  example) and the timezone-boundary hostile case (23:58/00:04 still matches).
+- `src/classify.js` (new file): takes matcher output, produces the 5 exception
+  types + REVIEW. Key decision: DUPLICATE_CHARGE detection compares each
+  unmatched payment against ALL payments (matched + review + unmatched), not
+  just other unmatched ones — necessary because the matcher already claimed
+  one of the two duplicate charges into `matched`, so the leftover charge has
+  to be compared against the winner, not against itself. AMOUNT_MISMATCH
+  overrides plain REVIEW when the only amount signal was `amount_within_10pct`
+  (not exact/fee-adjusted), matching the §7.2 table's "$1,800 vs $2,000 (10%)
+  → AMOUNT_MISMATCH" case exactly. Partial refunds (`refunded:false`,
+  `refundedAmount>0`) deliberately do NOT trigger ORPHAN_REFUND — that's a
+  Stripe semantic (their `refunded` flag is only true when fully refunded), so
+  the existing check already does the right thing without extra code. 11 tests.
+- `npm test`: 35/35 passing. Seam check (`grep -ri "hubspot\|stripe"` against
+  `matcher.js`/`classify.js`) returns nothing — confirmed clean both files.
+- Did not touch: `format.js` (Phase 4), any n8n Code/Switch/output nodes
+  (Phase 5), Ahad's seeder internals.
+
 ## Problems solved (never re-solve these)
 | Problem | Cause | Fix |
 |---|---|---|
@@ -159,18 +208,20 @@ None. (S4 blockers resolved S5: Docker installed → schema + creds done; CONTRA
 signed off by both.)
 
 ## Next session — start here
-Phase 1 is CLOSED. This session is **Phase 2 — the seeder (Ahad, upstream).**
-1. Read PLAN.md for the Phase 2 scope before writing any code. The seeder creates
-   deterministic test data across Stripe + HubSpot that the matcher can later
-   reconcile — the 7-payments / 6-deals shape from `test/fixtures/clean.json`,
-   including the deliberate exceptions (unmatched charge, etc.).
-2. Everything the seeder produces must obey `docs/CONTRACT.md` (dollars-as-number,
-   lowercased/plus-stripped emails, UTC ISO8601, url always populated, null for
-   missing). The seeder is the upstream that feeds those exact shapes.
-3. Real keys are in n8n's credential store already. Never put them in the repo.
-   `.env.example` stays placeholder-only.
-4. One phase per session — do Phase 2 only. Note Phase 3 (matcher — Murad) as the
-   next one; don't start it.
+Phase 2 CLOSED (Ahad). Phase 3 (matcher, Murad) is IN PROGRESS — continue it,
+do not jump to Phase 4.
+1. Decide if Phase 3 exit criteria are actually met: PLAN.md §6 wants ≥20 tests
+   covering every case in §7. We have 35 tests but haven't audited them row-by-row
+   against the §7 catalogue (7.1–7.5). Do that audit first — list which §7 rows
+   are genuinely uncovered vs. which are correctly out of scope (operational/
+   Phase 5-6 concerns like pagination, rate limits, currency filtering).
+2. Likely remaining gaps worth a look: two-contacts-same-email-different-deals
+   (7.1), "deal moved to won and back same day" (7.4), 3+ way duplicate charges.
+3. Once Phase 3 is genuinely done, next is Phase 4 — `src/format.js` (Murad):
+   exceptions → Slack blocks + Sheet rows. Don't start it before Phase 3 closes.
+4. Ahad's seeder (Phase 2) claims `expected.json` was verified against a real run
+   — if anyone wants to sanity-check that independently before Phase 5 assembly,
+   note it hasn't been re-verified by Murad's side.
 
 ## Ideas parked (NOT doing, do not start)
 - Web dashboard — README extensions only
@@ -183,3 +234,5 @@ Phase 1 is CLOSED. This session is **Phase 2 — the seeder (Ahad, upstream).**
 | 2026-07-17 | Keep HubSpot as the CRM | Phase 0 checks 5 & 6 passed — free tier filters deals by date server-side and the contact→deal email join works. No need for the Pipedrive fallback (PLAN.md §8). |
 | 2026-07-17 | API creds live in n8n's credential store, not `.env` | `.env.example` is the operator checklist; secrets never touch the repo. |
 | 2026-07-17 | schema.sql adds CHECK constraints on exception_type/status | Enforces the documented enums at the DB layer without changing the PLAN.md §6 column shape. |
+| 2026-07-18 | DUPLICATE_CHARGE compares an unmatched payment against ALL payments, not just other unmatched ones | The matcher already claims one of the two duplicate charges into `matched`; the leftover has no unmatched twin to compare against, only the winner. |
+| 2026-07-18 | AMOUNT_MISMATCH overrides plain REVIEW when the only amount signal is `amount_within_10pct` | PLAN.md §7.2 states 10% variance is AMOUNT_MISMATCH outright, not a soft REVIEW — confidence banding alone isn't enough, the classifier reads matcher reasons. |
