@@ -1,7 +1,7 @@
 # Progress
 
-**Last updated:** 2026-07-18 by Ahad, session 5
-**Current phase:** 1 CLOSED — next is Phase 2 (seeder)
+**Last updated:** 2026-07-18 by Ahad, session 6
+**Current phase:** 2 CLOSED — next is Phase 3 (matcher, Murad)
 **Days elapsed:** 2 / 21
 
 ## Phase 0 — 12-check results
@@ -40,8 +40,14 @@ proven against the real Phase 0 export at `test/fixtures/n8n-code-node-export.js
 Ahad's half was done sessions 4-5: `db/schema.sql`, `.env.example`, `docs/CONTRACT.md`.
 `spike/` deleted. `npm test` still green (3/3).
 
-Foundations are done. Next session opens Phase 2 — the seeder (Ahad, upstream) —
-and Phase 3 — the matcher (Murad, downstream). One phase per session.
+Foundations are done. **Phase 2 CLOSED (session 6).** The seeder
+(`seeder/scenarios.py`, `seed.py`, `teardown.py`) ran for real against live
+Stripe test mode + HubSpot: 46 succeeded charges, 45 deals/contacts, 1
+declined charge correctly isolated, 5 planted exceptions, 5 hostile
+must-match cases — every count verified against the live APIs and matches
+`seeder/expected.json` exactly. Next session opens Phase 3 — the matcher
+(Murad, downstream). It needs nothing from this session; it runs entirely
+against `test/fixtures/clean.json`. One phase per session.
 
 ## Done
 - [x] docker-compose.yml written (n8n + Postgres)
@@ -64,6 +70,10 @@ and Phase 3 — the matcher (Murad, downstream). One phase per session.
 - [x] 4 credentials stored in n8n credential store (done S5, manual UI)
 - [x] docs/CONTRACT.md signed off by BOTH (done S5 — Murad reviewed, both boxes checked)
 - [x] package.json/package-lock.json version mismatch fixed (S5, bb8d3ba)
+- [x] seeder/scenarios.py — dataset source of truth (36 clean, 5 exceptions, 5 hostile, 1 declined)
+- [x] seeder/seed.py — creates real Stripe + HubSpot records, tagged, idempotent guard, writes expected.json
+- [x] seeder/teardown.py — deletes tagged HubSpot records, refunds tagged Stripe charges
+- [x] Phase 2 — seeder run for real, verified against live APIs, all counts match expected.json
 
 ## Session log
 ### Session 1 — 2026-07-17
@@ -146,6 +156,40 @@ and Phase 3 — the matcher (Murad, downstream). One phase per session.
   of Ahad's; resolved in favor of Ahad's fuller close-out, folding in the
   package-lock fix.
 
+### Session 6 — 2026-07-18 (Ahad)
+- Built `seeder/scenarios.py`: single source of truth for the dataset. 36
+  clean customers (name/company generated deterministically, seed=42), the 5
+  planted exceptions from PLAN.md §6 (Mike duplicate, David payment-no-deal,
+  Priya deal-no-payment, Tom orphan-refund, Jenna amount-mismatch→review),
+  the 4 hostile must-match cases (Sarah casing, Jenna plus-tag, Raj midnight,
+  two John Smiths) plus one declined charge (`tok_chargeDeclined`).
+- Design call: Stripe charges can't be backdated — `created` is always the
+  real API-call time. Rewrote the whole scenario model around an `anchor`
+  (the actual run time) with minute offsets resolved at build time, instead
+  of PLAN.md's illustrative fixed Jan-14 date. HubSpot deal `closedate` has
+  no such restriction and is set directly.
+- Built `seed.py`: creates Stripe charges (metadata-tagged) and HubSpot
+  contacts+deals (tag lives in `jobtitle`/`dealname` prefix — no custom
+  property needed, avoids requiring `crm.schemas.deals.write`). Idempotency
+  guard searches for any existing seed-tagged deal before creating; `--force`
+  bypasses it. `--dry-run` prints without touching the network. Writes
+  `expected.json` — the scorecard.
+- Built `teardown.py`: HubSpot contacts/deals are truly deleted via the API.
+  Stripe test charges are NOT deletable through the API (Stripe's own
+  limitation) — teardown refunds any unrefunded tagged charges instead;
+  documented in the module docstring, not a gap in the script.
+- Blocker hit and resolved: HubSpot token from S5 only had read scopes
+  (`crm.objects.deals.read` + `crm.objects.contacts.read`). Seeder needs
+  write. User added `crm.objects.contacts.write` + `crm.objects.deals.write`
+  in the private-app settings, re-copied the token into both n8n's
+  credential store and `.env`.
+- Ran `seed.py` for real. Cross-checked directly against both live APIs
+  (not just trusting `expected.json`): Stripe shows 47 tagged charges (46
+  `succeeded` + 1 `failed`/declined, 1 refunded — Tom), HubSpot shows 45
+  tagged deals and 45 tagged contacts. Both match `expected.json` exactly.
+- Committed `seeder/` (`2135584`). Rebased onto Murad's concurrent
+  session-5 close-out (`43e55e9`) before pushing — clean, no conflicts.
+
 ## Problems solved (never re-solve these)
 | Problem | Cause | Fix |
 |---|---|---|
@@ -153,24 +197,27 @@ and Phase 3 — the matcher (Murad, downstream). One phase per session.
 | `npm install` rewrites package-lock.json | npm prunes other-platform optional native deps on install | Don't commit that diff — `git checkout -- package-lock.json`. Lockfile stays cross-platform. |
 | Real API keys pasted into `.env.example` | `.env.example` is git-TRACKED (`.gitignore` allows it via `!.env.example`) — it's the placeholder template, not a secret file | `git checkout -- .env.example` to restore `xxx` placeholders BEFORE commit. Real keys live only in n8n's credential store. Caught pre-commit S5, never pushed, no rotation needed. If the editor tab still holds them, close without saving. |
 | package.json (0.1.0) vs package-lock.json (1.0.0) mismatch | lock still had the `npm init` default version, never updated when package.json was set to 0.1.0 | Hand-edited both `version` fields in package-lock.json to 0.1.0 (not `npm install`, to avoid the optional-deps prune above). Commit bb8d3ba. |
+| HubSpot token had read-only scopes, seeder needs to create records | S5 only obtained `crm.objects.deals.read` + `crm.objects.contacts.read` (fetch-only, correct for Phase 5 but not Phase 2) | Added `crm.objects.contacts.write` + `crm.objects.deals.write` to the same private app, re-copied token into n8n credential store + `.env`. |
+| Stripe charges can't carry the planned Jan-14 demo date | `created` is server-set at API-call time, not client-settable | Redesigned scenarios.py around an `anchor` (actual run time) with minute offsets, not a fixed calendar date. HubSpot `closedate` is set directly since it has no such restriction. |
+| `python -c "c.metadata.get(...)"` raised `AttributeError: get` on a StripeObject | Stripe SDK's `StripeObject.__getattr__` doesn't proxy `.get()` the way a plain dict does | Use `c['metadata']` subscript access (or `'seed' in md`), not `.get()`, when poking at Stripe objects ad hoc. |
 
 ## Blockers
-None. (S4 blockers resolved S5: Docker installed → schema + creds done; CONTRACT
-signed off by both.)
+None.
 
 ## Next session — start here
-Phase 1 is CLOSED. This session is **Phase 2 — the seeder (Ahad, upstream).**
-1. Read PLAN.md for the Phase 2 scope before writing any code. The seeder creates
-   deterministic test data across Stripe + HubSpot that the matcher can later
-   reconcile — the 7-payments / 6-deals shape from `test/fixtures/clean.json`,
-   including the deliberate exceptions (unmatched charge, etc.).
-2. Everything the seeder produces must obey `docs/CONTRACT.md` (dollars-as-number,
-   lowercased/plus-stripped emails, UTC ISO8601, url always populated, null for
-   missing). The seeder is the upstream that feeds those exact shapes.
-3. Real keys are in n8n's credential store already. Never put them in the repo.
-   `.env.example` stays placeholder-only.
-4. One phase per session — do Phase 2 only. Note Phase 3 (matcher — Murad) as the
-   next one; don't start it.
+Phase 2 is CLOSED. This session is **Phase 3 — the matcher (Murad, downstream).**
+1. `git pull` first — picks up the Phase 2 seeder commit (doesn't block Murad's
+   work, just keeps the repo in sync).
+2. Read PLAN.md section 6 Phase 3 for the full scope before writing any code.
+   Works entirely off `test/fixtures/clean.json` — no APIs, no Docker, no waiting
+   on Ahad's seeded data.
+3. `src/normalize.js` (raw shape → contract shape), then real `src/matcher.js`
+   logic (currently a stub — replace with score-all-pairs, sort, greedy-assign
+   per PLAN §6, NOT first-match-wins), then `src/classify.js`.
+4. ≥ 20 tests covering PLAN.md section 7's edge case catalogue before this phase
+   is done.
+5. One phase per session — do Phase 3 only. Don't start Phase 4 (outputs) even
+   if there's time left.
 
 ## Ideas parked (NOT doing, do not start)
 - Web dashboard — README extensions only
@@ -183,3 +230,6 @@ Phase 1 is CLOSED. This session is **Phase 2 — the seeder (Ahad, upstream).**
 | 2026-07-17 | Keep HubSpot as the CRM | Phase 0 checks 5 & 6 passed — free tier filters deals by date server-side and the contact→deal email join works. No need for the Pipedrive fallback (PLAN.md §8). |
 | 2026-07-17 | API creds live in n8n's credential store, not `.env` | `.env.example` is the operator checklist; secrets never touch the repo. |
 | 2026-07-17 | schema.sql adds CHECK constraints on exception_type/status | Enforces the documented enums at the DB layer without changing the PLAN.md §6 column shape. |
+| 2026-07-18 | Seeder tags HubSpot records via `jobtitle`/`dealname` prefix, not a custom property | Avoids needing `crm.schemas.deals.write` scope just to tag test data — one fewer credential fight. |
+| 2026-07-18 | Seeder dataset is anchored to real run time, not a fixed calendar date | Stripe won't let charge `created` be backdated; the demo's "day" is whichever day you actually run `seed.py`. |
+| 2026-07-18 | teardown.py refunds Stripe test charges instead of deleting them | Stripe's API has no charge-delete endpoint. Refunding is the closest real cleanup; test-mode charges persisting in the dashboard costs nothing. |
