@@ -27,6 +27,7 @@ services:
       DB_POSTGRESDB_USER: n8n
       DB_POSTGRESDB_PASSWORD: n8n
       N8N_SECURE_COOKIE: "false"
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
     depends_on:
       postgres:
         condition: service_healthy

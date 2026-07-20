@@ -1,8 +1,10 @@
 # Progress
 
-**Last updated:** 2026-07-20 by Ahad, session 9
-**Current phase:** 5 IN PROGRESS (assembly, both) — nodes 1-6 built, waiting on Murad's nodes 7-14
-**Days elapsed:** 3 / 21
+**Last updated:** 2026-07-20 by Murad, session 9
+**Current phase:** 5 — assembly (both). Nodes 1-14 built and wired, Postgres branch
+verified with a clean run (`runs.status='ok'`, 12 exceptions logged, no duplicate
+inserts). Re-seeding now to check the 12-vs-5-expected discrepancy.
+**Days elapsed:** 4 / 21
 
 ## Phase 0 — 12-check results
 Ahad ran the upstream checks 2026-07-17 (Stripe test mode, HubSpot free tier private
@@ -178,6 +180,63 @@ it's always `null` in fixtures, a no-op for the exclusion logic. 3 new tests.
       final workflow.json)
 - [x] `seeder/teardown.py` bugs fixed (`.get()` on StripeObject, refunding
       an unpaid declined charge), `expected.json` regenerated
+
+**Phase 5 in progress (session 9, Murad).** Pulled Ahad's nodes 1-6 export
+(`workflow/workflow.template.json`). Built nodes 7-14 by hand in n8n: `Normalize`,
+`Match`, `Classify` (Code), `Insert Run` → `Attach Run Id` → `Split Out` →
+`Upsert Exception` and `Attach Run Id` → `Split Out Matched` → `Insert Match`
+(Postgres logging branch), `Format` → `Slack` and `Format` → `Split Out Sheet Rows`
+→ `Append row in sheet` (output branch), plus `Mark Run Failed` / `Failure Alert`
+error path. Full graph diagrammed in `workflow/ARCHITECTURE.md` (working note,
+not part of the locked repo layout).
+
+Fixed a real gap in `build/inject.js` before any of this could run: it dumped
+`src/*.js` verbatim into a Code node's `jsCode`, including the `export` keyword
+— n8n's Code node sandbox isn't a module context, so that's a guaranteed
+syntax error the first time it executes. Added `stripExports` plus an optional
+`driver` snippet appended per node (the glue that actually calls
+`normalize`/`match`/`classify`/`format` with n8n's `$input`, since the pure
+src files don't call themselves). Test-first, 56/56 passing. Driver snippets
+live in `build/drivers/*.js`; `build/build.js` is the new `npm run build`
+entrypoint wiring all 4 into `workflow.template.json` → `workflow.json`.
+
+Caught and fixed two real bugs while wiring the canvas:
+- Ahad's `Merge1` was `combineByPosition` on charges vs. deals — two
+  unrelated, differently-sized arrays; that zips `charge[i]` with `deal[i]`
+  garbage. Fixed to `Append`. `Normalize`'s driver also sidesteps trusting
+  Merge1's shape entirely — it reads `$('Filter')`, `$('Filter1')`,
+  `$('Get a contact')` directly by node name.
+- The `exceptions` table's `UNIQUE (exception_type, charge_id, deal_id)`
+  breaks idempotency for `DEAL_NO_PAYMENT`/`PAYMENT_NO_DEAL` rows: Postgres
+  treats `NULL != NULL`, so `ON CONFLICT` never matches when one of those ids
+  is null, meaning a re-run would insert a fresh duplicate every night instead
+  of updating `last_seen`. Fixed at the insert-parameter level (`payment?.id
+  || ''` instead of `|| null`) rather than touching the schema.
+
+First live execution run against real seeded data: `Normalize → Match →
+Classify → Format` chain ran clean, `Append row in sheet` wrote 12 rows,
+`Slack` posted. Real proof the matcher/classify/format pipeline works against
+live Stripe/HubSpot data, not just fixtures. **Blocked:** `Insert Run` failed —
+`relation "runs" does not exist` — `db/schema.sql` isn't loaded into whichever
+Postgres instance this n8n's credential currently points at (loaded in S5, but
+that container/volume may have been recreated since). Everything downstream of
+`Insert Run` (`Attach Run Id`, `Split Out`, `Upsert Exception`, `Split Out
+Matched`, `Insert Match`, `Mark Run Failed`) never ran as a result — its error
+output correctly routed straight to `Failure Alert`, skipping `Mark Run Failed`
+(no run row exists yet to update), which is the intended design.
+
+Also caught (background security review, before any commit): the exported
+`workflow.template.json`/`workflow.json` have the real Slack incoming-webhook
+URL hardcoded in the `Slack` HTTP Request node's `url` field. Neither file is
+committed yet (confirmed via `git status`), so nothing's been pushed, but this
+repo goes public per PLAN.md §3/§9 — needs switching to `{{ $env.SLACK_WEBHOOK_URL }}`
+before any commit, and the webhook should be rotated as good hygiene regardless.
+
+One more thing noted, not yet investigated: `Append row in sheet` wrote 12
+rows, but `expected.json` plants exactly 5 exceptions. Could be legitimate
+(re-seeding without `teardown.py` between sessions accumulates records within
+the lookback window) or a real classify/window bug — needs the Postgres branch
+working first (so `runs`/`matches` counts can be cross-checked) before digging in.
 
 ## Session log
 ### Session 1 — 2026-07-17
@@ -454,6 +513,72 @@ it's always `null` in fixtures, a no-op for the exclusion logic. 3 new tests.
   paused before building — waiting for Murad's push first to avoid
   re-exporting a divergent template mid-flight).
 
+### Session 9 — 2026-07-20 (Murad)
+- Pulled Ahad's `df9099a` (nodes 1-6 export). Built nodes 7-14 by hand in n8n
+  per PLAN.md §5 ownership: `Normalize`/`Match`/`Classify`/`Format` (Code),
+  `Insert Run`/`Upsert Exception`/`Insert Match` (Postgres), `Split Out` +
+  `Split Out Matched` + `Split Out Sheet Rows` (core), `Append row in sheet`
+  (Sheets), `Slack` (HTTP Request, incoming webhook — not the Slack
+  credential node), `Mark Run Failed`/`Failure Alert` error path. Full graph
+  in `workflow/ARCHITECTURE.md`.
+- Fixed `build/inject.js`: was dumping `export function ...` verbatim into
+  Code nodes, a guaranteed syntax error in n8n's non-module sandbox. Added
+  export-stripping + optional per-node `driver` snippet (the n8n-specific
+  glue calling into each pure src file). Test-first, 56/56 passing.
+  `build/drivers/*.js` + new `build/build.js` entrypoint; `npm run build`
+  now targets that instead of the old bare `inject.js`.
+- Fixed two real bugs found while wiring: `Merge1` was `combineByPosition`
+  zipping unrelated charges/deals arrays (switched to `Append`; `Normalize`'s
+  driver also reads `$('Filter')`/`$('Filter1')`/`$('Get a contact')` directly
+  rather than trusting Merge1's shape at all); and the `exceptions` table's
+  `UNIQUE` constraint silently breaking idempotency for null `charge_id`/
+  `deal_id` rows (Postgres `NULL != NULL` — fixed by using `''` instead of
+  `null` at insert-parameter level, not a schema change).
+- First live run against real seeded data: `Normalize → Match → Classify →
+  Format` chain succeeded, Sheet got 12 rows, Slack posted. **Blocked:**
+  `Insert Run` failed, `relation "runs" does not exist` — `db/schema.sql`
+  not loaded into this session's Postgres instance. Nothing downstream of
+  it ran; its error path correctly skipped `Mark Run Failed` (no run row to
+  update yet) and went straight to `Failure Alert`, as designed.
+- Caught (background security review) before any commit: real Slack webhook
+  URL hardcoded in the `Slack` node across both `workflow.template.json` and
+  `workflow.json`. Confirmed neither file is committed yet — not pushed —
+  but needs switching to `{{ $env.SLACK_WEBHOOK_URL }}` before it is, plus a
+  rotation as good hygiene regardless.
+- Open question, not yet investigated: 12 sheet rows vs. `expected.json`'s 5
+  planted exceptions. Needs the Postgres branch working (to cross-check
+  `runs`/`matches` counts) before digging in — could be stale accumulated
+  seed data (no `teardown.py` between sessions) or a real bug.
+- Continued same session: fixed the Postgres credential/schema mismatch
+  (re-loaded `db/schema.sql` via `Get-Content | docker compose exec -T`,
+  PowerShell doesn't support `<` redirection), moved the Slack webhook to
+  `{{ $env.SLACK_WEBHOOK_URL }}` in both workflow files plus
+  `docker-compose.yml`'s `n8n` service env and restarted the container.
+- Found and fixed the real `Upsert Exception` bug, three layers deep: (1) the
+  `query` field had a stray `Query Parameters (comma-separated, in order):`
+  line baked into the SQL text itself (pasted in by mistake, never just a
+  comment) — syntax error; (2) `queryReplacement` was a comma-joined string
+  of `{{ }}` expressions, and the last one (`JSON.stringify($json)`) contains
+  its own commas, desyncing the parameter split — switched to a single array
+  expression (`={{ [ ... ] }}`, exactly one `=` prefix, nothing outside the
+  `{{ }}`); (3) `Split Out`'s default destination field name matches the
+  source field name, so each split item was shaped `{runId, exceptions: {...
+  single exception...}}`, not flat — the parameter expressions needed
+  `$json.exceptions.type` etc, not `$json.type`. All three fixed directly in
+  `workflow.json`/`workflow.template.json` (not just live in the n8n UI) so
+  re-importing doesn't lose the fix.
+- Confirmed via direct psql: `runs` id=4, `status='ok'`, 12 exceptions logged,
+  `Failure Alert` did not fire. Postgres branch (`Insert Run` →
+  `Attach Run Id` → `Split Out` → `Upsert Exception`, `Split Out Matched` →
+  `Insert Match`) works end to end for the first time this phase.
+- Noted `matched: 0` on every run so far, alongside the 12-vs-5-expected
+  exception count — running `teardown.py` + fresh `seed.py` next to rule out
+  stale accumulated seed data before suspecting the matcher/normalize wiring.
+- Committed (`4fdfafe`): `build/inject.js` export-stripping fix, `build/build.js`,
+  `build/drivers/`, `workflow/workflow.template.json`, `workflow/workflow.json`,
+  `workflow/ARCHITECTURE.md`, docker-compose env var. 56/56 tests passing,
+  webhook secret confirmed absent from every committed file before pushing.
+
 ## Problems solved (never re-solve these)
 | Problem | Cause | Fix |
 |---|---|---|
@@ -472,38 +597,49 @@ it's always `null` in fixtures, a no-op for the exclusion logic. 3 new tests.
 | n8n Schedule Trigger "Invalid cron expression" | User typed the literal comment text `(2am daily)` into the cron field along with the expression | Field must contain only `0 0 2 * * *` (n8n 6-field format), no trailing comment. |
 | n8n Filter node conditions defaulted to string "is equal to" | Type dropdown wasn't switched from string to Number before picking the operator | Set type to Number first, then pick >=/< as needed. |
 | 9 seeded payments all showed `refunded: true` in the canvas output | Not a refund bug — the window Set node computes "yesterday," but freshly-seeded charges are timestamped "today," so the 9 items seen were stale leftovers from an older batch outside the window | Left window logic as-is (production-correct); re-seed and re-test rather than widen the test window. |
+| `build/inject.js` dumped `export function` verbatim into a Code node | n8n's Code node sandbox isn't a module context — `export` is a syntax error there | `stripExports()` regex-strips `export ` at line start before writing `jsCode`; added optional `driver` snippet param for the n8n-glue code each node needs. |
+| `Merge1` zipped unrelated charges/deals arrays | Set to `combineByPosition` — pairs `charge[i]` with `deal[i]`, meaningless for two independent, differently-sized collections | Switched to `Append`. `Normalize`'s driver also reads straight from `$('Filter')`/`$('Filter1')`/`$('Get a contact')` by name, not trusting the merged shape at all. |
+| `exceptions` table's `ON CONFLICT` never matches for `DEAL_NO_PAYMENT`/`PAYMENT_NO_DEAL` rows | `UNIQUE (exception_type, charge_id, deal_id)` — Postgres treats `NULL != NULL`, so a null `charge_id` or `deal_id` never conflicts with itself on a re-run | Use `''` instead of `null` for the missing id at insert-parameter level (not a schema change). |
+| `docker compose exec -T postgres psql ... < db/schema.sql` fails in PowerShell | PowerShell's `<` is reserved, no POSIX-style stdin redirection | `Get-Content db/schema.sql -Raw \| docker compose exec -T postgres psql -U n8n -d n8n`. |
+| `Upsert Exception` Postgres node: syntax error, then "no parameter $N", then null `exception_type` | Three separate bugs stacked: a parameter-list comment pasted into the `query` field itself; `queryReplacement` built as a comma-joined string of expressions instead of one array expression (broke once a value — `JSON.stringify($json)` — contained its own commas); and the expression read `$json.type` when `Split Out`'s default destination field name actually nests the split element under `$json.exceptions` | Strip the stray comment line from `query`; set `queryReplacement` to a single `={{ [ ... ] }}` array expression (exactly one leading `=`, nothing outside the `{{ }}`); read every field as `$json.exceptions.*`. Fixed in the JSON files directly, not just live in the n8n UI, so re-importing doesn't lose it. |
 
 ## Blockers
-None.
+| Blocker | Owner | Since | Needs |
+|---|---|---|---|
+| `Insert Run` fails: `relation "runs" does not exist` | Murad | session 9 | Re-run `db/schema.sql` against whichever Postgres instance this n8n's credential points to (container/volume may have been recreated since S5's load). Blocks the entire Postgres-logging branch and idempotency testing. |
+| Slack webhook hardcoded in `workflow.template.json`/`workflow.json` | Murad | session 9 | Switch the `Slack` node's URL to `{{ $env.SLACK_WEBHOOK_URL }}`, add the env var to `.env`/docker-compose, re-export. Neither file is committed yet — fix before first commit of this work. Rotate the webhook regardless. |
 
 ## Next session — start here
-**Phase 5 IN PROGRESS.** Nodes 1-6 built and pushed
-(`workflow/workflow.template.json`). Waiting on Murad to push his nodes 7-14
-(normalize/match/classify Code nodes + Switch + format Code node injected
-via `build/inject.js`).
-1. Pull Murad's push, import his `workflow.json` version into the n8n
-   canvas (don't re-export/overwrite his work — layer on top of it).
-2. Build error branches (node Settings → On Error → "Continue Using Error
-   Output") on nodes 3 (Get many charges), 4 (Get many deals), 5 (Get a
-   contact) — pattern was explained to the user, not yet executed. Same for
-   nodes 11 (Postgres) and 12 (Sheets) once those exist.
-3. Build the shared "run failed" alert chain all error-output branches feed
-   into: Postgres `runs` insert with `status='failed'` + Slack webhook alert.
-4. Wire node 6 (Merge1) → Murad's first Code node.
-5. Build/wire the Postgres upsert node (11) and Google Sheets append node (12).
-6. Get Murad the HubSpot credential value via a private channel (not chat,
-   not committed) so he can add it to his own n8n instance and re-select it
-   on the imported HubSpot nodes (bindings don't survive cross-instance
-   import).
-7. Two things carried into Phase 5 as fetch-node-scope work, not forgotten:
-   zero-amount Stripe validation-charge filtering (§7.2), and populating the
-   real `subscriptionId` value from the Stripe API.
-8. Verify `formatSlackMessage`'s block-kit output against Slack's real
-   50-blocks-per-message limit once the HTTP node exists.
-9. Phase 5 exit criteria per PLAN.md: seeded data in → exactly the exceptions
-   in `expected.json` out, run twice → same count (idempotency check).
-10. Finish `docs/INSTALL.md` steps 5-8 once `workflow.json` is final; re-export
-    and commit the final combined `workflow.template.json`/`workflow.json`.
+**Phase 5 in progress.** Nodes 1-14 wired, both blockers from earlier this
+session resolved, Postgres branch verified clean (run id=4, `status='ok'`,
+12 exceptions, no duplicate-insert errors).
+1. `teardown.py` + fresh `seed.py` is running/just ran — confirm it completed
+   cleanly, then re-run the workflow and check whether the exception count
+   still doesn't match `expected.json`'s planted 5, and whether `matched`
+   is still 0. If `matched` stays 0 on a clean dataset, treat it as a real
+   bug in `Match`/`Normalize`'s driver wiring, not stale data — start by
+   checking what `$('Filter')`/`$('Filter1')`/`$('Get a contact')` actually
+   hand to the `Normalize` driver.
+2. Once exception/match counts look right: run the workflow a second time,
+   confirm `runs`/`exceptions`/`matches` counts don't double — this is the
+   Phase 5 exit criteria (PLAN.md §6) and the first real exercise of the
+   `resolved`-flag report-only decision and the upsert idempotency key.
+3. Verify `formatSlackMessage`'s block-kit output against Slack's real
+   50-blocks-per-message limit once a run has enough exceptions to hit it.
+4. Rotate the Slack webhook (good hygiene — it was hardcoded in files that
+   existed locally for a while, even though never pushed to a public remote).
+5. Get Murad's HubSpot credential value to Ahad via a private channel (not
+   chat, not committed) so Ahad can add it to his own n8n instance and
+   re-select it on the imported HubSpot nodes (bindings don't survive
+   cross-instance import).
+6. Build error branches (On Error → "Continue Using Error Output") on nodes
+   3/4/5 (Stripe/HubSpot fetch, contact join) — explained, not yet built.
+7. Still open, still Phase-5-fetch-node scope, not forgotten: zero-amount/
+   declined-charge filtering is handled (`Normalize`'s driver, session 9) —
+   real `subscriptionId` population from the Stripe API is not (still
+   always `null`).
+8. Finish `docs/INSTALL.md` steps 5-8 once `workflow.json` is final;
+   re-export and commit the final combined workflow files.
 
 ## Ideas parked (NOT doing, do not start)
 - Web dashboard — README extensions only
@@ -525,3 +661,6 @@ via `build/inject.js`).
 | 2026-07-18 | Zero-amount Stripe validation-charge filtering (§7.2) deliberately NOT implemented this session | Vendor-specific (Stripe-only) and needs a real charge object with a status/type field not yet in the contract — belongs in the Phase 5 Stripe fetch node, not the pure-function matcher/classify. |
 | 2026-07-18 | Added `subscriptionId` (nullable) to the payment contract shape | Only way `classify.js` can distinguish a subscription renewal from a genuine untracked payment. Agreed live between Ahad and Murad, both signed off in `docs/CONTRACT.md`. Populating the real value is Ahad's Phase 5 fetch-node work. |
 | 2026-07-18 | Sheet `resolved` checkbox is report-only, NOT honoured by the workflow | Honouring it means reading the checkbox back out of Sheets into Postgres — a sync loop, extra infra, and Sheets is explicitly non-load-bearing per PLAN.md §3. The underlying data condition hasn't changed just because a human checked a box, so the exception correctly re-fires every run. Resolves PLAN.md §7.5's "decide this explicitly." Ahad and Murad independently landed on this same call same day. |
+| 2026-07-20 | Zero-amount + declined-charge filtering (§7.2/§7.4) done in `Normalize`'s n8n driver, not `src/normalize.js` | This is genuinely Stripe-shape-aware logic (`c.status`, `c.amount`) — belongs in the fetch-node-adjacent glue that's allowed to know vendor shapes, not the pure contract-shape function. Closes the item that had been carried since Phase 3's audit. |
+| 2026-07-20 | `Normalize` Code node reads `$('Filter')`/`$('Filter1')`/`$('Get a contact')` directly instead of consuming `Merge1`'s combined item | Sidesteps depending on `Merge1`'s combine mode being correct at all — more robust regardless of how the upstream merge is configured, and avoids re-guessing HubSpot's nested legacy-API property shape twice. |
+| 2026-07-20 | Postgres `exceptions` idempotency key uses `''` not `null` for a missing `charge_id`/`deal_id` | `UNIQUE` constraints treat `NULL != NULL` in Postgres, so a null id would never trigger `ON CONFLICT` and re-runs would duplicate `DEAL_NO_PAYMENT`/`PAYMENT_NO_DEAL` rows nightly. Fixed at the query-parameter level to avoid an `ALTER TABLE` this late. |

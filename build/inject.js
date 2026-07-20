@@ -1,14 +1,22 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
+// n8n's Code node sandbox is not a module context -- `export` is a syntax
+// error there. src/*.js files use `export function` so Vitest can import
+// them; strip the keyword before it lands in a Code node.
+function stripExports(source) {
+  return source.replace(/^export\s+/gm, '');
+}
+
 export function injectCode(workflow, mappings) {
   const nodesByName = new Map(workflow.nodes.map((node) => [node.name, node]));
 
-  for (const { nodeName, sourceFile } of mappings) {
+  for (const { nodeName, sourceFile, driver } of mappings) {
     const node = nodesByName.get(nodeName);
     if (!node) {
       throw new Error(`inject.js: no node named "${nodeName}" in workflow`);
     }
-    node.parameters.jsCode = readFileSync(sourceFile, 'utf8');
+    const source = stripExports(readFileSync(sourceFile, 'utf8'));
+    node.parameters.jsCode = driver ? `${source}\n${driver}` : source;
   }
 
   return workflow;

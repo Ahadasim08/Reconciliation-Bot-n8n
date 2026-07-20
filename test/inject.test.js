@@ -6,7 +6,7 @@ const EXPORT_PATH = new URL('./fixtures/n8n-code-node-export.json', import.meta.
 const MATCHER_PATH = new URL('../src/matcher.js', import.meta.url);
 
 describe('injectCode', () => {
-  it('writes a src file verbatim into the named Code node, staying valid JSON', () => {
+  it('writes a src file into the named Code node with `export` stripped, staying valid JSON', () => {
     const workflow = JSON.parse(readFileSync(EXPORT_PATH, 'utf8'));
     const matcherSource = readFileSync(MATCHER_PATH, 'utf8');
 
@@ -18,10 +18,33 @@ describe('injectCode', () => {
     const roundTripped = JSON.parse(JSON.stringify(result));
     const node = roundTripped.nodes.find((n) => n.name === 'Code in JavaScript');
 
-    expect(node.parameters.jsCode).toBe(matcherSource);
+    // n8n's Code node sandbox is not a module context -- `export` is a syntax
+    // error there. `injectCode` must strip it so the function declarations
+    // land as plain statements, still runnable, still legal after
+    // JSON.stringify round-tripping.
+    expect(node.parameters.jsCode).not.toMatch(/^export /m);
+    expect(node.parameters.jsCode).toBe(matcherSource.replace(/^export\s+/gm, ''));
+    expect(() => new Function(node.parameters.jsCode)).not.toThrow();
     expect(node.type).toBe('n8n-nodes-base.code');
     // Everything else on the node is untouched.
     expect(node.typeVersion).toBe(2);
+  });
+
+  it('appends a driver snippet after the stripped source when one is given', () => {
+    const workflow = JSON.parse(readFileSync(EXPORT_PATH, 'utf8'));
+
+    const result = injectCode(workflow, [
+      {
+        nodeName: 'Code in JavaScript',
+        sourceFile: MATCHER_PATH,
+        driver: 'return match($input.first().json.payments, $input.first().json.deals, {});',
+      },
+    ]);
+
+    const node = result.nodes.find((n) => n.name === 'Code in JavaScript');
+    expect(node.parameters.jsCode.trim().endsWith(
+      'return match($input.first().json.payments, $input.first().json.deals, {});'
+    )).toBe(true);
   });
 
   it('throws if the target node name does not exist', () => {
