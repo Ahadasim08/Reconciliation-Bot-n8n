@@ -293,7 +293,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO exceptions\n  (run_id, exception_type, charge_id, deal_id, email, amount, confidence, detail)\nVALUES\n  ($1, $2, $3, $4, $5, $6, $7, $8)\nON CONFLICT (exception_type, charge_id, deal_id)\nDO UPDATE SET last_seen = now();",
+        "query": "INSERT INTO exceptions\n  (run_id, exception_type, charge_id, deal_id, email, amount, confidence, detail)\nVALUES\n  ($1, $2, $3, $4, $5, $6, $7, $8)\nON CONFLICT (exception_type, charge_id, deal_id)\nDO UPDATE SET run_id = EXCLUDED.run_id, last_seen = now();",
         "options": {
           "queryReplacement": "={{ [ $json.runId, $json.exceptions.type, $json.exceptions.payment?.id || '', $json.exceptions.deal?.id || '', $json.exceptions.payment?.email || $json.exceptions.deal?.email || null, $json.exceptions.payment?.amount || $json.exceptions.deal?.amount || null, $json.exceptions.confidence ?? null, JSON.stringify($json.exceptions) ] }}"
         }

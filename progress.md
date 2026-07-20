@@ -1,12 +1,14 @@
 # Progress
 
-**Last updated:** 2026-07-20 by Murad, session 10
-**Current phase:** 5 — assembly (both). Nodes 1-14 wired, full Postgres branch
-(`Insert Run`/`Upsert Exception`/`Insert Match`) working end to end against
-freshly reseeded data — matches now insert correctly (confidence 100). Exit
-criteria not yet met: exception count vs `expected.json` not re-verified since
-the last round of fixes, no idempotency (run-twice) check done, error branches
-on nodes 3/4/5/11/12/14 not built.
+**Last updated:** 2026-07-20 by Murad, session 11
+**Current phase:** 5 — assembly (both). Clean canvas re-import done. Two real
+Postgres-node bugs found and fixed this session (Query Batching mode,
+`Upsert Exception`'s `ON CONFLICT` never updating `run_id`). Exit criteria
+still NOT met: fresh-seed test now shows 82 `PAYMENT_NO_DEAL` exceptions
+against an expected 1 — a real unresolved bug (not stale data, confirmed by
+re-testing on a freshly seeded batch), root cause not yet found. Error
+branches on nodes 3/4/5/11/12/14 still not built. `window_end` testing hack
+still active, not reverted.
 **Days elapsed:** 4 / 21
 
 ## Phase 0 — 12-check results
@@ -29,7 +31,37 @@ app, Slack incoming webhook, Google Sheets via service account).
 | 12 | Re-import the exported JSON: still works | Murad | PASS | |
 
 ## Status
-**Current state (session 10):** Phase 5 assembly is close but not exit-criteria-clean
+**Current state (session 11):** Clean canvas re-import happened (resolves the
+session 10 duplicate-suffixed-node blocker). Two real bugs found and fixed in
+the Postgres nodes while chasing why `exceptions` kept showing 0 rows for the
+latest run: (1) both `Upsert Exception` and `Insert Match` had their "Query
+Batching" option set to `Single`, which collapses all N input items into one
+combined query execution and returns only 1 output item — set both to
+`Independently`; (2) `Upsert Exception`'s `ON CONFLICT (exception_type,
+charge_id, deal_id) DO UPDATE SET last_seen = now()` never updated `run_id`,
+so every re-run of an already-seen exception silently kept the OLD run_id —
+the row existed, the query reported success, but it looked like nothing had
+inserted for the current run. Fixed to `DO UPDATE SET run_id =
+EXCLUDED.run_id, last_seen = now()` in both `workflow.json` and
+`workflow.template.json`. Confirmed via `psql` the run_id now updates
+correctly. Also confirmed `matches` having no UNIQUE constraint is
+deliberate (per-run audit log, not a dedup target) — not a bug, per
+`db/schema.sql`'s own comment.
+
+After those fixes, ran `teardown.py` + fresh `seed.py`
+(`seed:batch-1784541542`, 36 clean/5 exceptions/5 hostile/1 declined) to rule
+out stale accumulated data as the cause of an earlier 42-exceptions reading.
+Ruled out: fresh seed still produced 82 `PAYMENT_NO_DEAL` exceptions
+(expected exactly 1 — David Reyes) on run_id=18. This is a real, unresolved
+bug — matcher/classify logic worked correctly in session 10 (6 matches,
+confidence 100), so suspect the HubSpot deals fetch/filter/window or
+`Normalize`'s deal-reading isn't seeing most deals in this session's runs.
+Not yet diagnosed — session ended before checking `Normalize`'s `deals`
+array length or run 18's `matches` count. **This is the next session's
+starting point, not exception-count-vs-5 verification (which is now blocked
+on this bug), and not idempotency testing (blocked on the same thing).**
+
+**Prior state (session 10):** Phase 5 assembly is close but not exit-criteria-clean
 yet. The Postgres branch (`Insert Run` → `Attach Run Id` → `Split Out` →
 `Upsert Exception`, and `Split Out Matched` → `Insert Match`) works end to end
 against freshly reseeded data after a long chain of node-config bugs (see
@@ -654,6 +686,30 @@ working first (so `runs`/`matches` counts can be cross-checked) before digging i
   `expected.json`, run-twice idempotency), the nodes 3/4/5/11/12/14 error
   branches, or the clean canvas re-import — all carried to next session.
 
+### Session 11 — 2026-07-20 (Murad)
+- Downloaded current `workflow.json`, deleted the old canvas workflow, did a
+  clean re-import (resolves session 10's duplicate-suffixed-node blocker).
+- Chased a 0-exceptions-in-DB reading through several layers: `Classify`
+  itself was producing exceptions correctly (confirmed via node pin), but
+  `Upsert Exception`'s output showed only 1 item for 42 input items — traced
+  to the Postgres node's "Query Batching" option set to `Single` (combines
+  all items into one query call, one output item). Same bug independently
+  present on `Insert Match`. Fixed both to `Independently`.
+- After that fix, exceptions still read 0 for the latest run — traced
+  further to `Upsert Exception`'s `ON CONFLICT ... DO UPDATE SET last_seen =
+  now()` never touching `run_id`, so re-inserts of an exception already seen
+  in an older run silently kept that older run's id. Fixed the query to also
+  set `run_id = EXCLUDED.run_id`. Edited directly in `workflow.json` and
+  `workflow.template.json` (not just live in the n8n UI).
+- Ran `teardown.py` + fresh `seed.py` to rule out stale accumulated seed data
+  as the cause of an interim 42-exceptions reading (expected 5). New clean
+  batch `seed:batch-1784541542`. Fresh run (id 18) still shows 82
+  `PAYMENT_NO_DEAL` exceptions vs an expected 1 — genuine unresolved bug, not
+  stale data. Not yet diagnosed.
+- Did not do: root-cause the 82-vs-1 `PAYMENT_NO_DEAL` bug, error branches on
+  nodes 3/4/5/11/12/14, revert `window_end` testing hack, webhook rotation,
+  HubSpot credential handoff to Ahad — all carried to next session.
+
 ## Problems solved (never re-solve these)
 | Problem | Cause | Fix |
 |---|---|---|
@@ -680,56 +736,61 @@ working first (so `runs`/`matches` counts can be cross-checked) before digging i
 | Same-day manual test runs always saw `payments: []` even on a fresh seed | Not stale data — the window (`Edit Fields`'s `window_start`/`window_end`) checks "yesterday" by design (nightly cron), but the seeder can only stamp charges `created` = right now, so a same-day test run never falls inside a "yesterday" window | Testing-only: widen `window_end` to `{{ $now.plus({hours:1}).toUTC().toISO() }}`. Must revert before Phase 6/7 — see Blockers. |
 | `Insert Match` Postgres node: "Query Parameters must be a string of comma-separated values or an array of values" | Same class of bug as `Upsert Exception` above — `Split Out Matched` (fieldToSplitOut: `matchResult.matched`, include: All Other Fields) produces a literal top-level key named `matchResult.matched` (the dotted string itself is the key, not a nested path), not a flat `payment`/`deal`/`confidence` shape | Bracket-notation access: `$json['matchResult.matched'].payment.id` etc. Fixed in both workflow JSON files and live in the n8n UI. |
 | `Failure Alert` node: "access to env vars denied" after switching the Slack URL to `{{ $env.SLACK_WEBHOOK_URL }}` | n8n blocks `$env` access inside node expressions by default | Added `N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"` to `docker-compose.yml`'s `n8n` service environment, restarted the container. |
-| Confusing/contradictory node data mid-session (stale shapes, wrong field contents) | Re-importing `workflow.json` onto a canvas that already has same-named nodes makes n8n create renamed duplicates (`Filter2`, `Merge2`, `Normalize1`, etc.) instead of replacing — the live canvas silently diverges from the file | Always delete the whole workflow from the canvas before re-importing, never import on top of an existing same-named workflow. Cleanup still pending — see Blockers. |
+| Confusing/contradictory node data mid-session (stale shapes, wrong field contents) | Re-importing `workflow.json` onto a canvas that already has same-named nodes makes n8n create renamed duplicates (`Filter2`, `Merge2`, `Normalize1`, etc.) instead of replacing — the live canvas silently diverges from the file | Always delete the whole workflow from the canvas before re-importing, never import on top of an existing same-named workflow. Done session 11. |
+| `Upsert Exception`/`Insert Match` Postgres nodes returned only 1 output item regardless of how many input items arrived | Node's "Options → Query Batching" was set to `Single` — combines all input items into one query execution instead of running per item | Set Query Batching to `Independently` on both nodes. Not saved anywhere in the repo (n8n UI option, not part of the query text) — re-check after any future re-import. |
+| `Upsert Exception` reported success but the DB never showed the new run's exceptions | `ON CONFLICT (exception_type, charge_id, deal_id) DO UPDATE SET last_seen = now()` never updated `run_id` — an exception seen in an earlier run silently kept that old run_id forever on every subsequent conflict, so filtering by the latest `run_id` found nothing even though the upsert "succeeded" | Added `run_id = EXCLUDED.run_id` to the `DO UPDATE SET` clause, in both `workflow.json` and `workflow.template.json`. |
 
 ## Blockers
 | Blocker | Owner | Since | Needs |
 |---|---|---|---|
 | ~~`Insert Run` fails: `relation "runs" does not exist`~~ | Murad | session 9 | **RESOLVED** same session — schema re-loaded (`Get-Content db/schema.sql -Raw \| docker compose exec -T postgres psql -U n8n -d n8n`, PowerShell can't do `<` redirection). |
 | ~~Slack webhook hardcoded in `workflow.template.json`/`workflow.json`~~ | Murad | session 9 | **RESOLVED** same session — both files now use `{{ $env.SLACK_WEBHOOK_URL }}`, `docker-compose.yml`'s `n8n` service passes it through. Committed `4fdfafe`/`9f21730`. Webhook still needs rotating (was locally hardcoded for a while, even though never pushed). |
-| **`Edit Fields`'s `window_end` temporarily widened for manual testing** | Murad | session 9, still open session 10 | `window_end` is currently `{{ $now.plus({hours:1}).toUTC().toISO() }}` instead of the production `{{ $now.startOf('day').toUTC().toISO() }}` ("today at 00:00 UTC," the close of yesterday's window). **MUST REVERT before Phase 6/7 — this is a testing-only hack.** If this ships to the nightly cron as-is, every run's window includes "future" up to +1h from execution time instead of stopping at midnight, silently widening the recon window every night. |
-| **Duplicate suffixed nodes on the n8n canvas** (`Filter2`, `Merge2`, `Merge3`, `Normalize1`, `Match1`, `Classify1`, `Split Out Matched1`, etc.) | Murad | session 9, still open session 10 | Confirmed during session 10 debugging: re-importing `workflow.json` onto a canvas that already has same-named nodes makes n8n create renamed duplicates instead of replacing them, and the live canvas can silently diverge from the committed file (this cost significant debugging time chasing stale node output). Needs a full canvas delete + clean re-import before trusting any further run's output — has not been done yet, session 10's fixes were applied by hand-editing the live (possibly-duplicated) nodes plus the file, not verified post-reimport. |
-| **Phase 5 exit criteria not yet met** | Murad + Ahad | session 10 | PLAN.md §5: "seeded data in → exactly the exceptions in `expected.json` out. Run twice → same count." Neither half has been checked on the current (fixed) pipeline — exception count vs `expected.json`'s planted 5 not re-verified since the `Insert Match` fix, and no run-twice idempotency test done at all. |
+| ~~Duplicate suffixed nodes on the n8n canvas~~ | Murad | session 9 | **RESOLVED session 11** — full canvas delete + clean re-import done. |
+| **`Edit Fields`'s `window_end` temporarily widened for manual testing** | Murad | session 9, still open session 11 | `window_end` is currently `{{ $now.plus({hours:1}).toUTC().toISO() }}` instead of the production `{{ $now.startOf('day').toUTC().toISO() }}` ("today at 00:00 UTC," the close of yesterday's window). **MUST REVERT before Phase 6/7 — this is a testing-only hack.** If this ships to the nightly cron as-is, every run's window includes "future" up to +1h from execution time instead of stopping at midnight, silently widening the recon window every night. |
+| **82 `PAYMENT_NO_DEAL` exceptions on a fresh seed batch vs expected 1** | Murad | session 11 | New, real, unresolved. `run_id=18` against `seed:batch-1784541542` (clean seed, no stale data — ruled out). Session 10's matcher/classify were confirmed working (6 matches, confidence 100) so this looks like a deals-side pipeline problem introduced or exposed by the clean re-import — HubSpot "Get many deals"/`Filter1`/window, or `Normalize`'s direct `$('Filter1')` read, not yet checked. Start here next session: pin `Normalize`'s `deals` array length and run 18's `matches` count first. |
+| **Phase 5 exit criteria not yet met** | Murad + Ahad | session 11 | PLAN.md §5: "seeded data in → exactly the exceptions in `expected.json` out. Run twice → same count." Blocked on the 82-vs-1 bug above — can't verify exact-count or run-twice-idempotency until `PAYMENT_NO_DEAL` count is sane. |
 
 ## Next session — start here
-**Phase 5 close is the goal.** The Postgres branch works end to end as of
-session 10 (`Insert Run`/`Upsert Exception`/`Insert Match` all confirmed via
-direct `psql` — 6 matches at confidence 100, no constraint errors). What's
-left is verification, cleanup, and the error branches — no more expression/
-query-level bugs are known to be outstanding.
-1. **Clean canvas re-import first.** Delete the existing workflow from the
-   n8n canvas entirely, then import the current `workflow.json` fresh — this
-   clears out the `Filter2`/`Merge2`/etc. duplicates from session 9-10's
-   repeated imports and guarantees the canvas matches the file exactly.
-   Re-select the Postgres/Slack/Stripe/HubSpot credentials after import
-   (bindings don't survive re-import).
-2. Re-apply the `window_end` testing widen in the freshly-imported
-   `Edit Fields` node (`{{ $now.plus({hours:1}).toUTC().toISO() }}`) —
-   it won't survive the reimport since it was never in the file.
-3. Run the workflow once. Confirm the exception count matches
-   `expected.json`'s planted 5 exactly (not more, not fewer) — this was
-   never cleanly confirmed; every run so far had either duplicate-node
-   contamination, stale data, or a bug still active.
-4. Run the workflow a second time on the same data. Confirm `runs`/
-   `exceptions`/`matches` counts don't double — this is the actual PLAN.md
-   §5 exit criteria and the first real exercise of the `resolved`-flag
-   report-only decision and the upsert idempotency key.
-5. Once both pass: Phase 5 exit criteria met for the happy path. Still need
-   error branches (On Error → "Continue Using Error Output") on nodes
-   3/4/5/11/12/14 before Phase 5 is fully closeable per PLAN.md ("not
-   decoration — it's the thing the project is demonstrating").
-6. **Revert `window_end`** back to `{{ $now.startOf('day').toUTC().toISO() }}`
+**Diagnose the 82-vs-1 `PAYMENT_NO_DEAL` bug first — everything else in
+Phase 5 close is blocked on it.**
+1. Pin `Normalize`'s output on a fresh run, check the `deals` array length.
+   Compare against `seed:batch-1784541542`'s ~45 deals (36 clean + 5
+   exception + 5 hostile, minus the 1-2 intentionally-unjoined cases).
+2. If `deals` is near-empty: check HubSpot "Get many deals" + `Filter1`'s
+   date window on the canvas — likely cause, since the matcher/classify
+   logic itself was confirmed correct in session 10.
+3. If `deals` looks full but matches are still low: check `Normalize`'s
+   driver code — it reads `$('Filter1')`/`$('Get a contact')` directly by
+   node name (session 10 decision), so a renamed/reworked node from the
+   session 11 clean re-import could have silently broken that reference.
+4. Also check run 18's `matches` count via psql (`SELECT count(*) FROM
+   matches WHERE run_id=18`) as a cross-check — if matches are also low,
+   confirms deals-side, not a `PAYMENT_NO_DEAL`-specific classify bug.
+5. Once fixed: re-run once, confirm exception count matches `expected.json`'s
+   planted 5 exactly.
+6. Run a second time on the same data. Confirm `runs`/`exceptions`/`matches`
+   counts don't double — the actual PLAN.md §5 exit criteria. Note `matches`
+   is a deliberate per-run audit log (no UNIQUE constraint) so its count
+   growing per-run is correct; only `exceptions` needs to stay flat.
+7. Once both pass: build error branches (On Error → "Continue Using Error
+   Output") on nodes 3/4/5/11/12/14 — PLAN.md calls this "not decoration."
+8. **Revert `window_end`** back to `{{ $now.startOf('day').toUTC().toISO() }}`
    once testing is done — do not leave the testing hack in place.
-7. Verify `formatSlackMessage`'s block-kit output against Slack's real
+9. Verify `formatSlackMessage`'s block-kit output against Slack's real
    50-blocks-per-message limit once a run has enough exceptions to hit it.
-8. Rotate the Slack webhook (good hygiene — it was hardcoded locally for a
-   while, even though never pushed to a public remote).
-9. Get Murad's HubSpot credential value to Ahad via a private channel (not
-   chat, not committed) so Ahad can add it to his own n8n instance and
-   re-select it on the imported HubSpot nodes.
-10. Still open, still Phase-5-fetch-node scope, not forgotten: real
+10. Rotate the Slack webhook (good hygiene — it was hardcoded locally for a
+    while, even though never pushed to a public remote).
+11. Get Murad's HubSpot credential value to Ahad via a private channel (not
+    chat, not committed) so Ahad can add it to his own n8n instance and
+    re-select it on the imported HubSpot nodes.
+12. Still open, still Phase-5-fetch-node scope, not forgotten: real
     `subscriptionId` population from the Stripe API (always `null` currently).
-11. Finish `docs/INSTALL.md` steps 5-8 once `workflow.json` is final.
+13. Finish `docs/INSTALL.md` steps 5-8 once `workflow.json` is final.
+14. Remember: after any future canvas re-import, `Upsert Exception`'s and
+    `Insert Match`'s "Query Batching" option must be re-checked/re-set to
+    `Independently` — it's a live n8n node setting, not stored in the
+    committed JSON in a way that's obviously visible, and reset behavior on
+    reimport hasn't been fully characterized.
 
 ## Ideas parked (NOT doing, do not start)
 - Web dashboard — README extensions only
@@ -757,3 +818,4 @@ query-level bugs are known to be outstanding.
 | 2026-07-20 | Widened `window_end` to `now + 1h` instead of leaving the "yesterday" window alone for manual testing | Same-day-seeded charges (Stripe won't allow backdating — session 6 decision) can never fall inside a "yesterday" window, so every manual test run showed `payments: []` regardless of seed freshness. Testing-only — flagged explicitly in Blockers/Next-session to revert before any production-facing phase, since leaving it in would silently widen the nightly recon window forever. |
 | 2026-07-20 | `Postgres` node `queryReplacement` must be a single `={{ [ ... ] }}` array expression, never a comma-joined string of `{{ }}` blocks | n8n's older-style `{{ }}, {{ }}, ...` pattern stringifies and gets split on literal commas — breaks the moment any one value (e.g. `JSON.stringify(...)`) contains its own comma. Bit both `Upsert Exception` and `Insert Match` the same way. Adopting the array-expression form as the standard pattern for every future Postgres node in this workflow, not just a one-off fix. |
 | 2026-07-20 | Never re-import `workflow.json` onto a canvas that already has a workflow with the same node names | n8n creates renamed duplicates (`Filter2`, `Normalize1`, etc.) instead of replacing on conflict, silently diverging the live canvas from the committed file. Cost real debugging time this session chasing stale/duplicate node output before the pattern was recognized. Standard practice going forward: delete the canvas workflow fully before every re-import. |
+| 2026-07-20 | `matches` table's per-run growth (no dedup) is correct, not a bug | `db/schema.sql`'s own comment says the `UNIQUE` constraint on `exceptions` is the idempotency key — `matches` is a deliberate append-only per-run audit log. Confirmed this before spending time "fixing" it. |
