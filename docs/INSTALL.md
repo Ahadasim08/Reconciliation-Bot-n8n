@@ -65,6 +65,12 @@ In the n8n UI: **Credentials → Add Credential**, once per service:
 - **Stripe API** — paste the secret key
 - **HubSpot** — paste the private-app token
 - **Google Sheets** — upload the service-account JSON, or paste its fields
+- **Postgres** — for the workflow's Postgres node (writes `runs`/`exceptions`/
+  `matches`). This is the *same* database n8n itself runs on, not a separate
+  service — use the values from `docker-compose.yml`: host `postgres`, port
+  `5432`, database `n8n`, user `n8n`, password `n8n`. n8n's own
+  `DB_POSTGRESDB_*` env vars only cover n8n's internal storage; the Postgres
+  node in the canvas needs its own credential entry pointing at the same DB.
 - Slack does **not** get a stored credential — the webhook URL is used
   directly in the HTTP Request node that posts to Slack
 
@@ -74,9 +80,9 @@ In the n8n UI: **Credentials → Add Credential**, once per service:
 this repo (not `workflow.template.json` — that one has empty Code nodes).
 
 Open the imported workflow and re-select the credential for each node that
-needs one (Stripe node, HubSpot nodes, Google Sheets node) — imports don't
-carry credential bindings across n8n instances, only the credential *name*
-reference.
+needs one (Stripe node, HubSpot nodes, Google Sheets node, Postgres node) —
+imports don't carry credential bindings across n8n instances, only the
+credential *name* reference.
 
 ## 7. Activate and test
 
@@ -91,6 +97,14 @@ reference.
 If a node errors, the credential from step 6 is the most common cause —
 re-check it's actually selected on that specific node, not just present in
 the credential store.
+
+**Error branches:** the fetch nodes (Stripe, HubSpot deals, contact join) and
+the write nodes (Postgres, Sheets) each have an error output wired to a
+shared "run failed" chain — a Postgres `runs` insert with `status='failed'`
+plus a Slack alert. To confirm this actually works, temporarily break a
+credential (wrong key) on one fetch node, execute, and check: the run errors
+out cleanly, `runs` gets a `failed` row, and Slack posts the alert. Undo the
+credential change after.
 
 ## 8. Seed a test dataset (optional, for demo/dev only)
 
@@ -118,3 +132,4 @@ Stripe/HubSpot records.
 | HubSpot node returns 403 | Token scopes too narrow — see the scopes column in step 4 |
 | Sheets node fails to write | Sheet not shared with the service account's `client_email`, or Sheets API not enabled on the GCP project |
 | Seeder Stripe calls fail | Using a live key instead of a test key, or the key was revoked |
+| Postgres node errors, n8n itself works fine | Postgres node needs its own credential (step 5) — n8n's own `DB_POSTGRESDB_*` env vars don't cover it |
