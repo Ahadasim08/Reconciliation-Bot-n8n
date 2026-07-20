@@ -1,8 +1,8 @@
 # Progress
 
-**Last updated:** 2026-07-18 by Murad, session 8
-**Current phase:** 4 CLOSED (Murad, format.js) — next is Phase 5 (assembly, both)
-**Days elapsed:** 2 / 21
+**Last updated:** 2026-07-20 by Ahad, session 9
+**Current phase:** 5 IN PROGRESS (assembly, both) — nodes 1-6 built, waiting on Murad's nodes 7-14
+**Days elapsed:** 3 / 21
 
 ## Phase 0 — 12-check results
 Ahad ran the upstream checks 2026-07-17 (Stripe test mode, HubSpot free tier private
@@ -38,7 +38,22 @@ Zero-amount Stripe filtering (§7.2) remains deliberately deferred to Phase 5
 (fetch-node scope, not pure-function). Everything else in §7 that's
 matcher/classify-relevant is covered.
 
-**Phase 4 (outputs, Murad) CLOSED this session — `src/format.js` written:**
+**Phase 5 (assembly) IN PROGRESS.** Ahad built n8n canvas nodes 1-6 by hand
+(Schedule Trigger → window Set → Stripe fetch+filter → HubSpot deals
+fetch+filter → contact join → merges), fixed real bugs found along the way
+(cron field, filter type mismatches, three wiring mistakes, a window-vs-
+fresh-seed-data timing issue), exported as `workflow/workflow.template.json`
+and pushed so Murad's `build/inject.js` can inject his Code-node logic into
+it. `docs/INSTALL.md` drafted (steps 1-4 accurate now, 5-8 assume the
+finished `workflow.json`). Resolved the `resolved`-flag decision (report-
+only, see Decisions log — Murad landed on the same call independently same
+day). Two `seeder/teardown.py` bugs fixed (`.get()` on a StripeObject,
+refunding an unpaid declined charge) and `expected.json` regenerated.
+Waiting on Murad to push nodes 7-14 before continuing (error branches on
+nodes 3/4/5, wiring node 6 → his first Code node, Postgres/Sheets nodes,
+full assembly test).
+
+**Phase 4 (outputs, Murad) CLOSED prior session — `src/format.js` written:**
 `formatSlackMessage` (headline + severity-sorted, capped exception list, posts
 even at zero exceptions per PLAN.md), `formatSheetRows` (exception → sheet row
 shape), `summarize` (the headline's numbers). `docs/CONTRACT.md` updated with
@@ -155,6 +170,14 @@ it's always `null` in fixtures, a no-op for the exclusion logic. 3 new tests.
 - [x] Phase 4 exit — **CLOSED.** Postgres upsert double-Execute idempotency
       is Phase 5 territory (needs real nodes), everything within
       `format.js`'s own scope is done and tested.
+- [x] n8n canvas nodes 1-6 built (Schedule Trigger, window Set, Stripe
+      fetch+filter, HubSpot deals fetch+filter, contact join, two merges)
+- [x] `workflow/workflow.template.json` exported and pushed (verified no
+      secret values, only credential name references)
+- [x] `docs/INSTALL.md` drafted and pushed (steps 1-4 accurate, 5-8 pending
+      final workflow.json)
+- [x] `seeder/teardown.py` bugs fixed (`.get()` on StripeObject, refunding
+      an unpaid declined charge), `expected.json` regenerated
 
 ## Session log
 ### Session 1 — 2026-07-17
@@ -388,6 +411,49 @@ it's always `null` in fixtures, a no-op for the exclusion logic. 3 new tests.
   concurrent subscription-exclusion push (44 tests) merged in — see combined
   count in Status above and re-run after this merge.
 
+### Session 9 — 2026-07-20 (Ahad)
+- Read progress.md/CLAUDE.md, confirmed Murad's Phase 4 push landed, decided
+  Phase 5 canvas work (nodes 1-6) could start solo without waiting further.
+- Resolved the `resolved`-flag decision (see Decisions log) before starting
+  canvas work.
+- Built n8n canvas nodes 1-6 by hand via screen-share/screenshots (Claude
+  Code can't touch the n8n canvas directly — user-driven, Claude guided):
+  Schedule Trigger, Edit Fields (window Set, Luxon `$now.minus({days:1})`
+  yesterday window), Stripe "Get many charges" + Filter (client-side, since
+  this n8n version's native nodes have no server-side date filter), HubSpot
+  "Get many deals" + Filter1 (same reason), "Get a contact" (email join),
+  Merge (deal+contact, Combine-by-Position) → Merge1 (+ payments, Append
+  mode, since normalize/matcher.js does the real pairing downstream).
+- Bugs fixed along the way: literal comment text left in the cron field;
+  Filter node conditions defaulting to string "is equal to" instead of
+  numeric >=/<; three wiring mistakes (HubSpot deals wrongly chained after
+  the Stripe filter — would've re-fetched deals 9x; Merge fed the same
+  Filter1 output on both inputs instead of contact-joined data; Merge1
+  combined the wrong two branches, dropping payments entirely) — all caught
+  from canvas screenshots and error messages, fixed by rewiring.
+- Re-ran `seed.py` (fresh batch `seed:batch-1784366430`) before the real
+  assembly test. Hit `AttributeError: 'get'` and an unpaid-charge refund
+  crash in `teardown.py` — both fixed (see Problems solved), re-ran.
+- Diagnosed all-9-payments-showing-refunded as a window issue, not a refund
+  bug: freshly-seeded charges are timestamped "today," the window queries
+  "yesterday," so the canvas was showing stale leftover charges from a prior
+  batch. Left the window logic alone (production-correct) rather than
+  loosening it to pass a local eyeball test.
+- Copied the n8n export to `workflow/workflow.template.json`, verified via
+  grep no secret values leaked (only credential name references), committed
+  and pushed so Murad's `build/inject.js` has something to inject into.
+- Drafted and pushed `docs/INSTALL.md` (clone → docker compose up → schema
+  load → credentials → import → activate, plus optional seeder step and a
+  troubleshooting table) while waiting on Murad's nodes 7-14.
+- Explained to the user what Murad needs to do for his own HubSpot
+  credential (add it fresh to his own n8n instance, re-select on the
+  imported deal/contact nodes — credential bindings don't survive
+  cross-instance import, only the name reference does) and flagged sharing
+  the token via a private channel, never chat/commit.
+- Did not start: error branches on nodes 3/4/5 (explained the pattern,
+  paused before building — waiting for Murad's push first to avoid
+  re-exporting a divergent template mid-flight).
+
 ## Problems solved (never re-solve these)
 | Problem | Cause | Fix |
 |---|---|---|
@@ -401,29 +467,43 @@ it's always `null` in fixtures, a no-op for the exclusion logic. 3 new tests.
 | `classify.js` flagged closedwon deals with no email as `DEAL_NO_PAYMENT` | Contact-join-failed deals (null email) were never excluded from the unmatched-deal exception check | Added `&& deal.email` guard — null-email deals are skipped, not flagged, per PLAN §7.1. |
 | `matcher.js` could silently match a EUR charge to a USD deal | No currency check anywhere in `scorePair` — only email/amount/timestamp were scored | `scorePair` returns `null` immediately on any `payment.currency !== deal.currency`, before any other scoring runs. |
 | Amounts >10% off were indistinguishable from missing amount data | Amount scoring only pushed a `reasons` tag for the three positive tiers (exact/fee/10%); anything worse contributed nothing, so `classify.js` had no signal to work with | `matcher.js` now tags `amount_mismatch` whenever both amounts exist but clear no tolerance tier; `classify.js` treats it the same as `amount_within_10pct` → `AMOUNT_MISMATCH`. |
+| `teardown.py`: `AttributeError: 'get'` finding seed charges | Stripe SDK's `StripeObject.__getattr__` doesn't proxy `.get()` like a dict | Use `charge["metadata"]` subscript + `in` check instead of `.metadata.get(...)`. |
+| `teardown.py`: `InvalidRequestError` refunding a charge | Loop tried to refund the deliberately-declined/unpaid test charge too | Added `charge.paid and` guard before the refund call — only paid charges can be refunded. |
+| n8n Schedule Trigger "Invalid cron expression" | User typed the literal comment text `(2am daily)` into the cron field along with the expression | Field must contain only `0 0 2 * * *` (n8n 6-field format), no trailing comment. |
+| n8n Filter node conditions defaulted to string "is equal to" | Type dropdown wasn't switched from string to Number before picking the operator | Set type to Number first, then pick >=/< as needed. |
+| 9 seeded payments all showed `refunded: true` in the canvas output | Not a refund bug — the window Set node computes "yesterday," but freshly-seeded charges are timestamped "today," so the 9 items seen were stale leftovers from an older batch outside the window | Left window logic as-is (production-correct); re-seed and re-test rather than widen the test window. |
 
 ## Blockers
 None.
 
 ## Next session — start here
-**Phase 4 CLOSED.** Next is Phase 5 — Assembly (both, together, per PLAN.md).
-The two halves meet: Ahad's fetch nodes feed Murad's Code nodes for the first
-real end-to-end run against seeded data.
-1. Ahad's n8n canvas nodes 1-6 (trigger through merge) were held pending
-   `format.js` — clear to start/continue now.
-2. `build/inject.js` needs `format.js` in the workflow's Code node mapping —
-   wire it in alongside `normalize.js`/`matcher.js`/`classify.js`.
-3. Two things carried into Phase 5 as fetch-node-scope work, not forgotten:
+**Phase 5 IN PROGRESS.** Nodes 1-6 built and pushed
+(`workflow/workflow.template.json`). Waiting on Murad to push his nodes 7-14
+(normalize/match/classify Code nodes + Switch + format Code node injected
+via `build/inject.js`).
+1. Pull Murad's push, import his `workflow.json` version into the n8n
+   canvas (don't re-export/overwrite his work — layer on top of it).
+2. Build error branches (node Settings → On Error → "Continue Using Error
+   Output") on nodes 3 (Get many charges), 4 (Get many deals), 5 (Get a
+   contact) — pattern was explained to the user, not yet executed. Same for
+   nodes 11 (Postgres) and 12 (Sheets) once those exist.
+3. Build the shared "run failed" alert chain all error-output branches feed
+   into: Postgres `runs` insert with `status='failed'` + Slack webhook alert.
+4. Wire node 6 (Merge1) → Murad's first Code node.
+5. Build/wire the Postgres upsert node (11) and Google Sheets append node (12).
+6. Get Murad the HubSpot credential value via a private channel (not chat,
+   not committed) so he can add it to his own n8n instance and re-select it
+   on the imported HubSpot nodes (bindings don't survive cross-instance
+   import).
+7. Two things carried into Phase 5 as fetch-node-scope work, not forgotten:
    zero-amount Stripe validation-charge filtering (§7.2), and populating the
    real `subscriptionId` value from the Stripe API.
-4. Verify `formatSlackMessage`'s block-kit output against Slack's real
+8. Verify `formatSlackMessage`'s block-kit output against Slack's real
    50-blocks-per-message limit once the HTTP node exists.
-5. Phase 5 exit criteria per PLAN.md: seeded data in → exactly the exceptions
-   in `expected.json` out, run twice → same count (this is where the
-   `resolved`-flag report-only decision and Postgres upsert idempotency
-   actually get exercised for the first time).
-6. Ahad's seeder (Phase 2) was verified against live Stripe + HubSpot in
-   session 6 — no further re-verification needed.
+9. Phase 5 exit criteria per PLAN.md: seeded data in → exactly the exceptions
+   in `expected.json` out, run twice → same count (idempotency check).
+10. Finish `docs/INSTALL.md` steps 5-8 once `workflow.json` is final; re-export
+    and commit the final combined `workflow.template.json`/`workflow.json`.
 
 ## Ideas parked (NOT doing, do not start)
 - Web dashboard — README extensions only
