@@ -563,7 +563,7 @@
         "operation": "executeQuery",
         "query": "INSERT INTO matches (run_id, charge_id, deal_id, confidence, reasons)\nVALUES ($1, $2, $3, $4, $5);",
         "options": {
-          "queryReplacement": "={{ $json.runId }}, {{ $json.payment.id }}, {{ $json.deal.id }}, {{ $json.confidence }}, {{ JSON.stringify($json.reasons) }}"
+          "queryReplacement": "={{ [ $json.runId, $json['matchResult.matched'].payment.id, $json['matchResult.matched'].deal.id, $json['matchResult.matched'].confidence, JSON.stringify($json['matchResult.matched'].reasons) ] }}"
         }
       },
       "type": "n8n-nodes-base.postgres",
