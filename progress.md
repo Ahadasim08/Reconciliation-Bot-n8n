@@ -1,15 +1,21 @@
 # Progress
 
-**Last updated:** 2026-07-20 by Murad, session 11
-**Current phase:** 5 — assembly (both). Clean canvas re-import done. Two real
-Postgres-node bugs found and fixed this session (Query Batching mode,
-`Upsert Exception`'s `ON CONFLICT` never updating `run_id`). Exit criteria
-still NOT met: fresh-seed test now shows 82 `PAYMENT_NO_DEAL` exceptions
-against an expected 1 — a real unresolved bug (not stale data, confirmed by
-re-testing on a freshly seeded batch), root cause not yet found. Error
-branches on nodes 3/4/5/11/12/14 still not built. `window_end` testing hack
-still active, not reverted.
-**Days elapsed:** 4 / 21
+**Last updated:** 2026-07-22 by Murad, session 12 (in progress)
+**Current phase:** 5 — assembly (both). Root cause of the 82-vs-1
+`PAYMENT_NO_DEAL` bug found: `Filter1`'s deals window only covered "yesterday,"
+but `scenarios.py` deliberately lags a deal's `closedate` up to 72h after its
+charge (realistic CRM lag) — most seeded deals fell outside the 1-day window
+and were silently dropped before `Normalize` ever saw them. Fix applied to
+both workflow JSON files (new `deals_window_start` = now-5d, `Filter1`'s lower
+bound now uses it instead of the payments' `window_start`) but **not yet
+re-verified against a live run** — canvas needs a clean re-import first. Also
+found and fixed a real `teardown.py` bug in the same session: `CONTAINS_TOKEN`
+on `SEED_TAG_PREFIX` ("seed:batch-") never matched (HubSpot tokenizes on
+punctuation, so the compound string never equals one token) — teardown had
+been silently leaving every seeded deal/contact behind, which is how 45+
+stale deals piled up across sessions. Error branches on nodes 3/4/5/11/12/14
+still not built. `window_end` testing hack still active, not reverted.
+**Days elapsed:** 6 / 21
 
 ## Phase 0 — 12-check results
 Ahad ran the upstream checks 2026-07-17 (Stripe test mode, HubSpot free tier private
@@ -710,6 +716,35 @@ working first (so `runs`/`matches` counts can be cross-checked) before digging i
   nodes 3/4/5/11/12/14, revert `window_end` testing hack, webhook rotation,
   HubSpot credential handoff to Ahad — all carried to next session.
 
+### Session 12 — 2026-07-22 (Murad, in progress)
+- Diagnosed the 82-vs-1 `PAYMENT_NO_DEAL` bug carried from session 11.
+  Pinned `Filter1`'s kept/discarded output (via n8n's export-JSON feature,
+  saved to `seeder/Filter-1-JSON/` for inspection) on a fresh same-day seed
+  batch: 4 kept, 48 discarded. Of the 48, 41 belonged to the *current* seed
+  batch (not stale data) with `closedate` values up to ~45h past
+  `window_end`. Traced to `scenarios.py`'s `deal_offset_min =
+  charge_offset_min + deal_lag_min` (`deal_lag_min` randint 0–4320, i.e. up
+  to 72h of deliberate CRM lag) — `Filter1`'s 1-day "yesterday" window was
+  never wide enough to catch a deal that legitimately closes days after its
+  charge. This silently dropped most deals before `Normalize`/`Match` ever
+  ran, so unmatched payments were misclassified `PAYMENT_NO_DEAL` instead of
+  finding their (late-closing) deal.
+- Along the way, ran `teardown.py` and got `found: 0 deals` despite 52
+  existing on the canvas — a second real bug (see Problems solved). Fixed,
+  re-ran teardown (45 deals/45 contacts actually deleted this time), reseeded
+  clean — final batch `seed:batch-1784701139`, `expected.json` regenerated.
+- Fix applied to `Edit Fields`/`Filter1` in both `workflow.json` and
+  `workflow.template.json`: new `deals_window_start` field (`now - 5 days`,
+  covers the 72h lag plus margin), `Filter1`'s lower-bound condition now
+  reads `deals_window_start` instead of the shared `window_start` (which
+  stays as-is for the Stripe payments `Filter` node — payments don't have
+  this lag). **Not yet re-verified live** — needs a clean canvas re-import
+  (delete + import `workflow.json`, re-set both Postgres nodes' Query
+  Batching to `Independently`, re-select credentials) before trusting a run.
+- Did not do yet: re-import/re-verify the fix, re-run exit-criteria checks,
+  error branches, revert `window_end` hack — carried forward within this
+  same session.
+
 ## Problems solved (never re-solve these)
 | Problem | Cause | Fix |
 |---|---|---|
@@ -739,6 +774,8 @@ working first (so `runs`/`matches` counts can be cross-checked) before digging i
 | Confusing/contradictory node data mid-session (stale shapes, wrong field contents) | Re-importing `workflow.json` onto a canvas that already has same-named nodes makes n8n create renamed duplicates (`Filter2`, `Merge2`, `Normalize1`, etc.) instead of replacing — the live canvas silently diverges from the file | Always delete the whole workflow from the canvas before re-importing, never import on top of an existing same-named workflow. Done session 11. |
 | `Upsert Exception`/`Insert Match` Postgres nodes returned only 1 output item regardless of how many input items arrived | Node's "Options → Query Batching" was set to `Single` — combines all input items into one query execution instead of running per item | Set Query Batching to `Independently` on both nodes. Not saved anywhere in the repo (n8n UI option, not part of the query text) — re-check after any future re-import. |
 | `Upsert Exception` reported success but the DB never showed the new run's exceptions | `ON CONFLICT (exception_type, charge_id, deal_id) DO UPDATE SET last_seen = now()` never updated `run_id` — an exception seen in an earlier run silently kept that old run_id forever on every subsequent conflict, so filtering by the latest `run_id` found nothing even though the upsert "succeeded" | Added `run_id = EXCLUDED.run_id` to the `DO UPDATE SET` clause, in both `workflow.json` and `workflow.template.json`. |
+| `teardown.py` reported `found: 0 deals` (and undercounted contacts) despite 45+ real seed deals existing | `CONTAINS_TOKEN` search value was `SEED_TAG_PREFIX` ("seed:batch-") — HubSpot tokenizes on punctuation (`:`/`-`), so a compound string with punctuation never equals a single indexed token and the search matched nothing | Search on the bare token `"seed"` (survives tokenization) instead, then filter the results in Python for the real prefix (`SEED_TAG_PREFIX in dealname` / `jobtitle.startswith(SEED_TAG_PREFIX)`). This is why 45+ stale deals from old sessions had been silently accumulating instead of being cleaned by teardown. |
+| 82 `PAYMENT_NO_DEAL` exceptions vs expected 1 (carried from session 11) | `Filter1`'s deals window only covered "yesterday" (`window_start`/`window_end`), but `scenarios.py` deliberately lags a deal's `closedate` up to 72h after its charge (simulated CRM lag) — most seeded deals fell outside that 1-day window and were dropped before `Normalize`/`Match` ever saw them, so their payment came up unmatched and got misclassified | Added `deals_window_start` (`now - 5 days`) to `Edit Fields`, `Filter1`'s lower-bound condition now reads it instead of the shared `window_start`. Payments' `Filter` node keeps the original `window_start` — payments don't have this lag. Applied to both `workflow.json`/`workflow.template.json`; not yet re-verified live. |
 
 ## Blockers
 | Blocker | Owner | Since | Needs |
@@ -747,7 +784,7 @@ working first (so `runs`/`matches` counts can be cross-checked) before digging i
 | ~~Slack webhook hardcoded in `workflow.template.json`/`workflow.json`~~ | Murad | session 9 | **RESOLVED** same session — both files now use `{{ $env.SLACK_WEBHOOK_URL }}`, `docker-compose.yml`'s `n8n` service passes it through. Committed `4fdfafe`/`9f21730`. Webhook still needs rotating (was locally hardcoded for a while, even though never pushed). |
 | ~~Duplicate suffixed nodes on the n8n canvas~~ | Murad | session 9 | **RESOLVED session 11** — full canvas delete + clean re-import done. |
 | **`Edit Fields`'s `window_end` temporarily widened for manual testing** | Murad | session 9, still open session 11 | `window_end` is currently `{{ $now.plus({hours:1}).toUTC().toISO() }}` instead of the production `{{ $now.startOf('day').toUTC().toISO() }}` ("today at 00:00 UTC," the close of yesterday's window). **MUST REVERT before Phase 6/7 — this is a testing-only hack.** If this ships to the nightly cron as-is, every run's window includes "future" up to +1h from execution time instead of stopping at midnight, silently widening the recon window every night. |
-| **82 `PAYMENT_NO_DEAL` exceptions on a fresh seed batch vs expected 1** | Murad | session 11 | New, real, unresolved. `run_id=18` against `seed:batch-1784541542` (clean seed, no stale data — ruled out). Session 10's matcher/classify were confirmed working (6 matches, confidence 100) so this looks like a deals-side pipeline problem introduced or exposed by the clean re-import — HubSpot "Get many deals"/`Filter1`/window, or `Normalize`'s direct `$('Filter1')` read, not yet checked. Start here next session: pin `Normalize`'s `deals` array length and run 18's `matches` count first. |
+| ~~82 `PAYMENT_NO_DEAL` exceptions on a fresh seed batch vs expected 1~~ | Murad | session 11 | **Root cause found + fix applied session 12** — `Filter1`'s window was too narrow for the deliberate 72h deal-lag in `scenarios.py`. See Problems solved. **Not yet re-verified against a live run** — needs clean canvas re-import first. |
 | **Phase 5 exit criteria not yet met** | Murad + Ahad | session 11 | PLAN.md §5: "seeded data in → exactly the exceptions in `expected.json` out. Run twice → same count." Blocked on the 82-vs-1 bug above — can't verify exact-count or run-twice-idempotency until `PAYMENT_NO_DEAL` count is sane. |
 
 ## Next session — start here

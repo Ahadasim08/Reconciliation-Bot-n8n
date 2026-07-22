@@ -36,6 +36,12 @@
               "name": "window_end",
               "value": "={{ $now.plus({hours:1}).toUTC().toISO() }}",
               "type": "string"
+            },
+            {
+              "id": "2a8f3e91-6c4d-4b7a-9e5c-7d1f8b2a4c60",
+              "name": "deals_window_start",
+              "value": "={{ $now.minus({days:5}).startOf('day').toUTC().toISO() }}",
+              "type": "string"
             }
           ]
         },
@@ -158,7 +164,7 @@
             {
               "id": "88188f82-e1b6-4a2c-94e1-dc383662b8b9",
               "leftValue": "={{ parseInt($json.properties.closedate.value) }}",
-              "rightValue": "={{ Date.parse($('Edit Fields').item.json.window_start) }}",
+              "rightValue": "={{ Date.parse($('Edit Fields').item.json.deals_window_start) }}",
               "operator": {
                 "type": "number",
                 "operation": "gte"
