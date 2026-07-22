@@ -36,7 +36,7 @@ def find_seed_deals(token):
                 "filters": [{
                     "propertyName": "dealname",
                     "operator": "CONTAINS_TOKEN",
-                    "value": SEED_TAG_PREFIX,
+                    "value": "seed",
                 }]
             }],
             "properties": ["dealname"],
@@ -49,7 +49,10 @@ def find_seed_deals(token):
         after = result.get("paging", {}).get("next", {}).get("after")
         if not after:
             break
-    return deals
+    # CONTAINS_TOKEN matches on the bare "seed" token (HubSpot tokenizes on
+    # punctuation, so the full "seed:batch-" prefix never equals one token) —
+    # narrow back down to real seed rows here.
+    return [d for d in deals if SEED_TAG_PREFIX in d["properties"].get("dealname", "")]
 
 
 def find_seed_contacts(token):
@@ -61,10 +64,10 @@ def find_seed_contacts(token):
                 "filters": [{
                     "propertyName": "jobtitle",
                     "operator": "CONTAINS_TOKEN",
-                    "value": SEED_TAG_PREFIX,
+                    "value": "seed",
                 }]
             }],
-            "properties": ["email"],
+            "properties": ["email", "jobtitle"],
             "limit": 100,
         }
         if after:
@@ -74,7 +77,7 @@ def find_seed_contacts(token):
         after = result.get("paging", {}).get("next", {}).get("after")
         if not after:
             break
-    return contacts
+    return [c for c in contacts if c["properties"].get("jobtitle", "").startswith(SEED_TAG_PREFIX)]
 
 
 def find_seed_charges():

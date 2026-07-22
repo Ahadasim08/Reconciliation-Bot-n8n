@@ -1,7 +1,7 @@
 {
-  "batch": "seed:batch-1784541542",
-  "window_start": "2026-07-20T00:00:00+00:00",
-  "window_end": "2026-07-20T23:59:59+00:00",
+  "batch": "seed:batch-1784701139",
+  "window_start": "2026-07-22T00:00:00+00:00",
+  "window_end": "2026-07-22T23:59:59+00:00",
   "payments_expected": 46,
   "deals_expected": 45,
   "exceptions_expected": 5,

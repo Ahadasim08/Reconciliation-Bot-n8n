@@ -9,8 +9,12 @@ coverage/
 dist/
 .vscode/
 
-# python / spike
+# python / venv
 __pycache__/
 *.pyc
 service-account.json
 **/service-account.json
+Reconciliation-Bot-n8n/
+.venv/
+venv/
+

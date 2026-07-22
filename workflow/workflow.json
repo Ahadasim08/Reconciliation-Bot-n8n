@@ -295,6 +295,7 @@
         "operation": "executeQuery",
         "query": "INSERT INTO exceptions\n  (run_id, exception_type, charge_id, deal_id, email, amount, confidence, detail)\nVALUES\n  ($1, $2, $3, $4, $5, $6, $7, $8)\nON CONFLICT (exception_type, charge_id, deal_id)\nDO UPDATE SET run_id = EXCLUDED.run_id, last_seen = now();",
         "options": {
+          "queryBatching": "transaction",
           "queryReplacement": "={{ [ $json.runId, $json.exceptions.type, $json.exceptions.payment?.id || '', $json.exceptions.deal?.id || '', $json.exceptions.payment?.email || $json.exceptions.deal?.email || null, $json.exceptions.payment?.amount || $json.exceptions.deal?.amount || null, $json.exceptions.confidence ?? null, JSON.stringify($json.exceptions) ] }}"
         }
       },
@@ -563,6 +564,7 @@
         "operation": "executeQuery",
         "query": "INSERT INTO matches (run_id, charge_id, deal_id, confidence, reasons)\nVALUES ($1, $2, $3, $4, $5);",
         "options": {
+          "queryBatching": "transaction",
           "queryReplacement": "={{ [ $json.runId, $json['matchResult.matched'].payment.id, $json['matchResult.matched'].deal.id, $json['matchResult.matched'].confidence, JSON.stringify($json['matchResult.matched'].reasons) ] }}"
         }
       },
@@ -594,7 +596,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        880,
+        912,
         720
       ],
       "id": "2c96cb96-77c2-4e57-8f39-6623ad294020",
@@ -611,7 +613,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        560,
+        592,
         384
       ],
       "id": "2ddbaa59-b371-4cab-ad14-bfdf0aa2709d",
@@ -907,9 +909,10 @@
   "active": false,
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate"
+    "binaryMode": "separate",
+    "availableInMCP": false
   },
-  "versionId": "4e375973-55af-4b73-a79a-7a327b40ca13",
+  "versionId": "dfefe89c-56eb-4e18-83cd-500ce6b72d73",
   "meta": {
     "instanceId": "5ad6761c3df174a59789152e8e809be51e3a6e9fc3fdba31f182bf732d30864e"
   },
