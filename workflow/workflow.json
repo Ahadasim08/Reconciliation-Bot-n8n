@@ -34,7 +34,7 @@
             {
               "id": "1c5781dc-11af-4d24-bb50-3b651f886393",
               "name": "window_end",
-              "value": "={{ $now.plus({hours:1}).toUTC().toISO() }}",
+              "value": "={{ $now.plus({days:4}).toUTC().toISO() }}",
               "type": "string"
             },
             {
