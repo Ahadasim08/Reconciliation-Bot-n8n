@@ -401,6 +401,39 @@ working first (so `runs`/`matches` counts can be cross-checked) before digging i
   something this session can do), HubSpot credential handoff to Ahad (same —
   a private-channel action between the two people, not a file/code change).
 
+## Phase 5 close-out — DRAFT, NOT YET FORMAL (pending Ahad's sign-off)
+Mechanically ready to close. Not marked closed above because every prior
+phase in this project closed with both people confirming (Phase 1, Phase 3),
+not unilaterally — same rule applies here.
+
+**Exit criteria:**
+- [x] Exact-count match — verified session 13 via per-scenario cross-check
+  against real Stripe charge IDs (raw aggregate counts are permanently
+  unreliable in this shared test sandbox — see Problems solved).
+- [x] Run-twice idempotency — verified session 13; `exceptions` rows upsert
+  onto the new `run_id`, `matches` grows append-only as designed.
+- [x] Error branches on all 6 required nodes (PLAN §5 point 6) — built and
+  break-tested session 13.
+- [x] Jenna REVIEW-vs-must-match contradiction in PLAN.md — resolved,
+  Ahad's call, `scenarios.py`/`expected.json` updated (session 13).
+- [x] Slack block-kit 50-block limit — clamped in code, tested (session 14).
+- [x] `docs/INSTALL.md` — complete, steps 1-8 accurate (session 14).
+
+**Outstanding, not exit blockers:**
+- [ ] Slack webhook rotation — human action (Slack app owner), not code.
+- [ ] Murad's HubSpot credential → Ahad, private channel, so Ahad can
+  re-select it on the imported HubSpot nodes on his own instance.
+- [ ] `subscriptionId` real population — deliberately left for Ahad
+  (his fetch-node ownership, scoped in session 14, not built).
+- [ ] `workflow.json` changed session 14 (format.js block clamp) — needs a
+  full canvas delete + clean re-import before the next live run, and a
+  post-reimport check that `Upsert Exception`/`Insert Match`'s Query
+  Batching option is still `Independently`.
+
+**To formally close:** Ahad confirms he's good with the above, then flip
+"Current phase" at the top of this file to Phase 6 and check these boxes for
+real (not draft).
+
 ## Session log
 ### Session 1 — 2026-07-17
 - Wrote `docker-compose.yml`: n8n + Postgres 16-alpine, healthcheck-gated
