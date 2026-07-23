@@ -75,7 +75,8 @@
           "id": "h8iD5QVOB9kogLK8",
           "name": "Stripe account"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -149,7 +150,8 @@
           "id": "68V9F2H8THTYmeKE",
           "name": "HubSpot account 2"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -227,7 +229,8 @@
           "id": "kOXNsOMTZNMkuUOy",
           "name": "HubSpot account 3"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -483,7 +486,7 @@
       ],
       "id": "457f9e48-1d54-4924-8152-6a1e6b35fd8b",
       "name": "Slack",
-      "onError": "continueRegularOutput"
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -667,6 +670,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Failure Alert",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -686,6 +696,13 @@
         [
           {
             "node": "Filter1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failure Alert",
             "type": "main",
             "index": 0
           }
@@ -726,6 +743,13 @@
             "node": "Merge",
             "type": "main",
             "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Failure Alert",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -903,6 +927,18 @@
         [
           {
             "node": "Mark Run Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Failure Alert",
             "type": "main",
             "index": 0
           }

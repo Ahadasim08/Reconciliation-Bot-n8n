@@ -15,10 +15,10 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.3,
       "position": [
-        -2688,
-        368
+        0,
+        48
       ],
-      "id": "05ec1c0b-5cc7-49eb-9a6c-60686d411725",
+      "id": "158519fe-8851-4f88-9ab0-d13df565bd11",
       "name": "Schedule Trigger"
     },
     {
@@ -34,7 +34,7 @@
             {
               "id": "1c5781dc-11af-4d24-bb50-3b651f886393",
               "name": "window_end",
-              "value": "={{ $now.plus({days:4}).toUTC().toISO() }}",
+              "value": "={{ $now.startOf('day').toUTC().toISO() }}",
               "type": "string"
             },
             {
@@ -50,10 +50,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -2464,
-        368
+        224,
+        48
       ],
-      "id": "bbe9a072-1801-4931-85fe-9ddd3307f99a",
+      "id": "7a14b19e-413d-4f96-9a29-b307f544cc72",
       "name": "Edit Fields"
     },
     {
@@ -65,17 +65,18 @@
       "type": "n8n-nodes-base.stripe",
       "typeVersion": 1,
       "position": [
-        -1792,
-        192
+        896,
+        -128
       ],
-      "id": "a072613f-64f0-449f-9494-6675a904789c",
+      "id": "b2d1e6fc-f006-4c91-9b99-2df3d0828569",
       "name": "Get many charges",
       "credentials": {
         "stripeApi": {
           "id": "h8iD5QVOB9kogLK8",
           "name": "Stripe account"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -113,10 +114,10 @@
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2.3,
       "position": [
-        -1568,
-        192
+        1120,
+        -128
       ],
-      "id": "56628750-49aa-4b52-a057-b329bf6b2c16",
+      "id": "c303ca71-ed67-45b8-82e8-933559d05ac4",
       "name": "Filter"
     },
     {
@@ -139,17 +140,18 @@
       "type": "n8n-nodes-base.hubspot",
       "typeVersion": 2.2,
       "position": [
-        -2240,
-        464
+        448,
+        144
       ],
-      "id": "74cf9a9f-f344-4260-a778-c8133dd87216",
+      "id": "d8cee8be-48c9-4cde-b7f8-20a8d4745f11",
       "name": "Get many deals",
       "credentials": {
         "hubspotAppToken": {
           "id": "68V9F2H8THTYmeKE",
           "name": "HubSpot account 2"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -187,10 +189,10 @@
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2.3,
       "position": [
-        -2016,
-        464
+        672,
+        144
       ],
-      "id": "fc581327-e326-4d04-9efd-28f01315cc39",
+      "id": "2e4d35b5-18c4-4ec8-b854-3a2b53158d6c",
       "name": "Filter1"
     },
     {
@@ -217,17 +219,18 @@
       "type": "n8n-nodes-base.hubspot",
       "typeVersion": 2.2,
       "position": [
-        -1776,
-        560
+        896,
+        64
       ],
-      "id": "a73995bb-734c-4c23-9e51-3adad58eaed0",
+      "id": "8492180f-bfa5-4d18-a6e9-df87db802d6f",
       "name": "Get a contact",
       "credentials": {
         "hubspotAppToken": {
           "id": "kOXNsOMTZNMkuUOy",
           "name": "HubSpot account 3"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -238,10 +241,10 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        -1568,
-        464
+        1120,
+        144
       ],
-      "id": "e3a4597e-4fc5-478d-a7d8-7dde9938de13",
+      "id": "523f9eb0-9a78-492d-9b6b-dcc0c8c7ab8e",
       "name": "Merge"
     },
     {
@@ -249,10 +252,10 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        -1344,
-        368
+        1344,
+        48
       ],
-      "id": "d4402f3d-9571-47db-9531-3ef83b401e61",
+      "id": "c8416979-a8f8-41eb-8370-7ad2a0ce6d72",
       "name": "Merge1"
     },
     {
@@ -262,23 +265,23 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -896,
-        368
+        1792,
+        48
       ],
-      "id": "cf2f1aae-4291-4a17-87c0-6412f207f69d",
+      "id": "5c2b33c4-7b56-46e7-927f-22e83b9e3dbd",
       "name": "Match"
     },
     {
       "parameters": {
-        "jsCode": "const DEFAULT_CONFIG = {\n  duplicateWindowMs: 60 * 60 * 1000,\n  excludeSubscriptions: true,\n};\n\nfunction isDuplicateOf(a, b, windowMs) {\n  if (a === b) return false;\n  if (!a.email || a.email !== b.email) return false;\n  const aCents = Math.round(a.amount * 100);\n  const bCents = Math.round(b.amount * 100);\n  if (aCents !== bCents) return false;\n  const diffMs = Math.abs(new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());\n  return diffMs <= windowMs;\n}\n\nfunction classify(matchResult, config) {\n  const cfg = { ...DEFAULT_CONFIG, ...config };\n  const exceptions = [];\n\n  for (const pair of [...matchResult.matched, ...matchResult.review]) {\n    const { payment, deal, confidence, reasons } = pair;\n    if (payment.refunded && deal.stage === 'closedwon') {\n      exceptions.push({ type: 'ORPHAN_REFUND', payment, deal, confidence });\n    } else if (reasons.includes('amount_within_10pct') || reasons.includes('amount_mismatch')) {\n      exceptions.push({ type: 'AMOUNT_MISMATCH', payment, deal, confidence });\n    } else if (matchResult.review.includes(pair)) {\n      exceptions.push({ type: 'REVIEW', payment, deal, confidence });\n    }\n  }\n\n  for (const deal of matchResult.unmatchedDeals) {\n    if (deal.stage === 'closedwon' && deal.email) {\n      exceptions.push({ type: 'DEAL_NO_PAYMENT', deal });\n    }\n  }\n\n  const allPayments = [\n    ...matchResult.matched.map((m) => m.payment),\n    ...matchResult.review.map((r) => r.payment),\n    ...matchResult.unmatchedPayments,\n  ];\n\n  for (const payment of matchResult.unmatchedPayments) {\n    const duplicateOf = allPayments.find((other) => isDuplicateOf(payment, other, cfg.duplicateWindowMs));\n    if (duplicateOf) {\n      exceptions.push({ type: 'DUPLICATE_CHARGE', payment, duplicateOf });\n    } else if (cfg.excludeSubscriptions && payment.subscriptionId != null) {\n      // subscription renewal, no new deal expected — not an exception (PLAN.md §7.4)\n    } else {\n      exceptions.push({ type: 'PAYMENT_NO_DEAL', payment, unmatchable: !payment.email });\n    }\n  }\n\n  return exceptions;\n}\n\n// Driver for the \"Classify\" Code node. Appended after src/classify.js.\n// Output feeds two branches: Split Out(exceptions) -> Postgres, and\n// Format -> Slack/Sheets. Both need matchResult kept alongside exceptions.\nconst { matchResult } = $input.first().json;\nconst exceptions = classify(matchResult, {});\nreturn [{ json: { matchResult, exceptions } }];\n"
+        "jsCode": "const DEFAULT_CONFIG = {\n  duplicateWindowMs: 60 * 60 * 1000,\n  excludeSubscriptions: true,\n};\n\nfunction isDuplicateOf(a, b, windowMs) {\n  if (a === b) return false;\n  if (a.refunded || b.refunded) return false;\n  if (!a.email || a.email !== b.email) return false;\n  const aCents = Math.round(a.amount * 100);\n  const bCents = Math.round(b.amount * 100);\n  if (aCents !== bCents) return false;\n  const diffMs = Math.abs(new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());\n  return diffMs <= windowMs;\n}\n\nfunction classify(matchResult, config) {\n  const cfg = { ...DEFAULT_CONFIG, ...config };\n  const exceptions = [];\n\n  for (const pair of [...matchResult.matched, ...matchResult.review]) {\n    const { payment, deal, confidence, reasons } = pair;\n    if (payment.refunded && deal.stage === 'closedwon') {\n      exceptions.push({ type: 'ORPHAN_REFUND', payment, deal, confidence });\n    } else if (reasons.includes('amount_within_10pct') || reasons.includes('amount_mismatch')) {\n      exceptions.push({ type: 'AMOUNT_MISMATCH', payment, deal, confidence });\n    } else if (matchResult.review.includes(pair)) {\n      exceptions.push({ type: 'REVIEW', payment, deal, confidence });\n    }\n  }\n\n  for (const deal of matchResult.unmatchedDeals) {\n    if (deal.stage === 'closedwon' && deal.email) {\n      exceptions.push({ type: 'DEAL_NO_PAYMENT', deal });\n    }\n  }\n\n  const allPayments = [\n    ...matchResult.matched.map((m) => m.payment),\n    ...matchResult.review.map((r) => r.payment),\n    ...matchResult.unmatchedPayments,\n  ];\n\n  for (const payment of matchResult.unmatchedPayments) {\n    const duplicateOf = allPayments.find((other) => isDuplicateOf(payment, other, cfg.duplicateWindowMs));\n    if (duplicateOf) {\n      exceptions.push({ type: 'DUPLICATE_CHARGE', payment, duplicateOf });\n    } else if (cfg.excludeSubscriptions && payment.subscriptionId != null) {\n      // subscription renewal, no new deal expected — not an exception (PLAN.md §7.4)\n    } else {\n      exceptions.push({ type: 'PAYMENT_NO_DEAL', payment, unmatchable: !payment.email });\n    }\n  }\n\n  return exceptions;\n}\n\n// Driver for the \"Classify\" Code node. Appended after src/classify.js.\n// Output feeds two branches: Split Out(exceptions) -> Postgres, and\n// Format -> Slack/Sheets. Both need matchResult kept alongside exceptions.\nconst { matchResult } = $input.first().json;\nconst exceptions = classify(matchResult, {});\nreturn [{ json: { matchResult, exceptions } }];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -672,
-        368
+        2016,
+        48
       ],
-      "id": "6678f27d-c643-48be-8ced-c8a9e9a2583e",
+      "id": "fa70b642-7c9f-4536-a9f5-ca089a513f7e",
       "name": "Classify"
     },
     {
@@ -290,10 +293,10 @@
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
       "position": [
-        0,
-        384
+        2688,
+        64
       ],
-      "id": "60f28016-591b-4bdc-b319-32c3d50f36dd",
+      "id": "57b73fb1-7c7c-421e-b971-01bda7caf23b",
       "name": "Split Out"
     },
     {
@@ -301,17 +304,16 @@
         "operation": "executeQuery",
         "query": "INSERT INTO exceptions\n  (run_id, exception_type, charge_id, deal_id, email, amount, confidence, detail)\nVALUES\n  ($1, $2, $3, $4, $5, $6, $7, $8)\nON CONFLICT (exception_type, charge_id, deal_id)\nDO UPDATE SET run_id = EXCLUDED.run_id, last_seen = now();",
         "options": {
-          "queryBatching": "transaction",
           "queryReplacement": "={{ [ $json.runId, $json.exceptions.type, $json.exceptions.payment?.id || '', $json.exceptions.deal?.id || '', $json.exceptions.payment?.email || $json.exceptions.deal?.email || null, $json.exceptions.payment?.amount || $json.exceptions.deal?.amount || null, $json.exceptions.confidence ?? null, JSON.stringify($json.exceptions) ] }}"
         }
       },
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        224,
-        384
+        2912,
+        64
       ],
-      "id": "50988023-e5e8-4a42-af92-43b940ed92e5",
+      "id": "e4c910d2-0609-4091-83fe-837de17143ed",
       "name": "Upsert Exception",
       "credentials": {
         "postgres": {
@@ -441,10 +443,10 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
       "position": [
-        224,
-        192
+        2912,
+        -128
       ],
-      "id": "d3752ab1-15ff-46f9-8946-7c71ffa7fa6d",
+      "id": "512376ff-3c65-4afb-be41-8d1cbf5092a2",
       "name": "Append row in sheet",
       "credentials": {
         "googleSheetsOAuth2Api": {
@@ -461,10 +463,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -224,
-        96
+        2464,
+        -224
       ],
-      "id": "4a356a5c-10fe-4086-b344-c4c4040fd954",
+      "id": "c3a4f3be-41b7-402a-8d10-2aaee633002e",
       "name": "Format"
     },
     {
@@ -479,12 +481,12 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        0,
-        0
+        2688,
+        -320
       ],
-      "id": "932b1de2-1b70-4fa7-8dfa-05856e792a85",
+      "id": "457f9e48-1d54-4924-8152-6a1e6b35fd8b",
       "name": "Slack",
-      "onError": "continueRegularOutput"
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -493,10 +495,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1120,
-        368
+        1568,
+        48
       ],
-      "id": "c3934aa5-bd03-4ab8-be70-e5b997ed5fd7",
+      "id": "12f257c2-4512-49d6-8cd6-c8ced19720e0",
       "name": "Normalize"
     },
     {
@@ -507,10 +509,10 @@
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
       "position": [
-        0,
-        192
+        2688,
+        -128
       ],
-      "id": "c640401c-8edf-4454-89d0-dd700951a3fd",
+      "id": "c43779d1-eadc-418a-b1a0-483d5e117310",
       "name": "Split Out Sheet Rows"
     },
     {
@@ -524,10 +526,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        -448,
-        704
+        2240,
+        384
       ],
-      "id": "cb4fb83d-419e-48e4-b2d4-5ef4a6672c68",
+      "id": "c37ebbe9-7d70-42cf-bd92-096d66cac189",
       "name": "Insert Run",
       "credentials": {
         "postgres": {
@@ -544,10 +546,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -224,
-        480
+        2464,
+        160
       ],
-      "id": "b04a9b49-5f2e-44b0-96d5-52df715167e7",
+      "id": "45defb85-2daf-4a8f-b57a-737f0ade99a7",
       "name": "Attach Run Id"
     },
     {
@@ -559,10 +561,10 @@
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
       "position": [
-        0,
-        576
+        2688,
+        256
       ],
-      "id": "06313cc0-b5f5-4d52-8a46-603f44d9528e",
+      "id": "5ff841e2-7878-4f33-b4ed-7b2c5f764d12",
       "name": "Split Out Matched"
     },
     {
@@ -570,17 +572,16 @@
         "operation": "executeQuery",
         "query": "INSERT INTO matches (run_id, charge_id, deal_id, confidence, reasons)\nVALUES ($1, $2, $3, $4, $5);",
         "options": {
-          "queryBatching": "transaction",
           "queryReplacement": "={{ [ $json.runId, $json['matchResult.matched'].payment.id, $json['matchResult.matched'].deal.id, $json['matchResult.matched'].confidence, JSON.stringify($json['matchResult.matched'].reasons) ] }}"
         }
       },
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        224,
-        576
+        2912,
+        256
       ],
-      "id": "4e7b9f84-5a0d-46b2-99fd-bac1f11532a9",
+      "id": "e6070993-3553-490b-add1-ca1fa5c0f3ba",
       "name": "Insert Match",
       "credentials": {
         "postgres": {
@@ -602,10 +603,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        912,
-        720
+        3568,
+        400
       ],
-      "id": "2c96cb96-77c2-4e57-8f39-6623ad294020",
+      "id": "992cc422-1ea0-4292-9936-9de653826656",
       "name": "Failure Alert"
     },
     {
@@ -619,10 +620,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        592,
-        384
+        3248,
+        64
       ],
-      "id": "2ddbaa59-b371-4cab-ad14-bfdf0aa2709d",
+      "id": "8efcfbd3-315b-4ea6-8e32-0ee11df0ca8b",
       "name": "Mark Run Failed",
       "credentials": {
         "postgres": {
@@ -669,6 +670,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Failure Alert",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -688,6 +696,13 @@
         [
           {
             "node": "Filter1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failure Alert",
             "type": "main",
             "index": 0
           }
@@ -728,6 +743,13 @@
             "node": "Merge",
             "type": "main",
             "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Failure Alert",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -910,6 +932,18 @@
           }
         ]
       ]
+    },
+    "Slack": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Failure Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
@@ -918,11 +952,12 @@
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "dfefe89c-56eb-4e18-83cd-500ce6b72d73",
+  "versionId": "879a8b12-9b69-4629-82a0-e14ae369ce3d",
   "meta": {
+    "templateCredsSetupCompleted": true,
     "instanceId": "5ad6761c3df174a59789152e8e809be51e3a6e9fc3fdba31f182bf732d30864e"
   },
   "nodeGroups": [],
-  "id": "cvlT0gsEoCp4duqh",
+  "id": "ob89K5cknBU6QmCU",
   "tags": []
 }

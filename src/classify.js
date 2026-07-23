@@ -5,6 +5,7 @@ const DEFAULT_CONFIG = {
 
 function isDuplicateOf(a, b, windowMs) {
   if (a === b) return false;
+  if (a.refunded || b.refunded) return false;
   if (!a.email || a.email !== b.email) return false;
   const aCents = Math.round(a.amount * 100);
   const bCents = Math.round(b.amount * 100);

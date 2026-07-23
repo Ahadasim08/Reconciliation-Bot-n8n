@@ -291,7 +291,8 @@ def run(dry_run: bool, force: bool, max_workers: int = 8) -> None:
     def process_hostile_item(s: Dict[str, Any]) -> None:
         seed_charge(batch, anchor, s["key"], s["name"], s["stripe_email"], s["amount"], s["charge_offset_min"], dry_run)
         if hs_token:
-            seed_deal_and_contact(hs_token, batch, anchor, s["name"], s["stripe_email"], s["hubspot_email"], s["amount"], s["deal_offset_min"], s["stage"], dry_run)
+            deal_amount = s.get("deal_amount", s["amount"])
+            seed_deal_and_contact(hs_token, batch, anchor, s["name"], s["stripe_email"], s["hubspot_email"], deal_amount, s["deal_offset_min"], s["stage"], dry_run)
 
     # Collect expectation metrics before execution
     for s in dataset["exceptions"]:
