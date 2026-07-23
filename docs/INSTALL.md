@@ -2,11 +2,6 @@
 
 20-minute setup on a machine that has never seen this repo. Follow in order.
 
-**Status note:** this doc is written against the finished Phase 5 assembly.
-As of this draft, Phase 5 is still in progress (nodes 1-6 built, nodes 7-14
-being wired). Steps 1-4 below are already accurate and testable today; steps
-5-7 assume the full `workflow/workflow.json` exists.
-
 ---
 
 ## 1. Prerequisites
@@ -43,6 +38,12 @@ Load them once:
 docker compose exec -T postgres psql -U n8n -d n8n < db/schema.sql
 ```
 
+On Windows PowerShell (no `<` redirection), use:
+
+```powershell
+Get-Content db/schema.sql -Raw | docker compose exec -T postgres psql -U n8n -d n8n
+```
+
 Re-running this is safe — the schema uses `CREATE TABLE IF NOT EXISTS`.
 
 ## 4. Get the four credentials
@@ -71,8 +72,11 @@ In the n8n UI: **Credentials → Add Credential**, once per service:
   `5432`, database `n8n`, user `n8n`, password `n8n`. n8n's own
   `DB_POSTGRESDB_*` env vars only cover n8n's internal storage; the Postgres
   node in the canvas needs its own credential entry pointing at the same DB.
-- Slack does **not** get a stored credential — the webhook URL is used
-  directly in the HTTP Request node that posts to Slack
+- Slack does **not** get a stored credential — set `SLACK_WEBHOOK_URL` in
+  your `.env` file instead. `docker-compose.yml` passes it into the n8n
+  container as an environment variable, and the `Slack`/`Failure Alert` HTTP
+  Request nodes read it via `{{ $env.SLACK_WEBHOOK_URL }}`. Restart the stack
+  (`docker compose up -d`) after setting it so n8n picks up the new value.
 
 ## 6. Import the workflow
 

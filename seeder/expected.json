@@ -28,12 +28,12 @@
     }
   ],
   "must_match_not_flag": [
+    "jenna_review",
     "sarah_casing",
     "jenna_plustag",
     "raj_midnight",
     "john_smith_a",
-    "john_smith_b",
-    "jenna_review"
+    "john_smith_b"
   ],
   "note": "declined charge (tok_chargeDeclined) intentionally excluded from payments_expected"
 }

@@ -209,3 +209,17 @@ describe('classify — DUPLICATE_CHARGE (Mike)', () => {
     expect(exceptions[0].type).toBe('DUPLICATE_CHARGE');
   });
 });
+
+describe('classify — refunded charge is not a duplicate match', () => {
+  it('does not flag an unmatched charge as DUPLICATE_CHARGE against an old refunded charge with the same email/amount', () => {
+    const oldRefunded = payment({ id: 'ch_old', email: 'pat@co.com', amount: 500, refunded: true, timestamp: '2026-01-14T09:00:00.000Z' });
+    const newCharge = payment({ id: 'ch_new', email: 'pat@co.com', amount: 500, timestamp: '2026-01-14T09:10:00.000Z' });
+
+    const matchResult = match([oldRefunded, newCharge], [], {});
+    const exceptions = classify(matchResult, {});
+
+    expect(exceptions.filter((e) => e.type === 'DUPLICATE_CHARGE')).toHaveLength(0);
+    const paymentNoDeal = exceptions.filter((e) => e.type === 'PAYMENT_NO_DEAL');
+    expect(paymentNoDeal.map((e) => e.payment.id).sort()).toEqual(['ch_new', 'ch_old'].sort());
+  });
+});

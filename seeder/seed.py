@@ -269,8 +269,7 @@ def run(dry_run: bool, force: bool, max_workers: int = 8) -> None:
 
     print(f"batch: {batch}")
     print(f"clean: {len(dataset['clean'])}  exceptions: {len(dataset['exceptions'])}  "
-          f"hostile: {len(dataset['hostile'])}  fee_tolerance_matches: {len(dataset['fee_tolerance_matches'])}  "
-          f"declined: 1")
+          f"hostile: {len(dataset['hostile'])}  declined: 1")
 
     expected_exceptions: List[Dict[str, Any]] = []
     must_match_keys: List[str] = []
@@ -292,14 +291,13 @@ def run(dry_run: bool, force: bool, max_workers: int = 8) -> None:
     def process_hostile_item(s: Dict[str, Any]) -> None:
         seed_charge(batch, anchor, s["key"], s["name"], s["stripe_email"], s["amount"], s["charge_offset_min"], dry_run)
         if hs_token:
-            seed_deal_and_contact(hs_token, batch, anchor, s["name"], s["stripe_email"], s["hubspot_email"], s["amount"], s["deal_offset_min"], s["stage"], dry_run)
+            deal_amount = s.get("deal_amount", s["amount"])
+            seed_deal_and_contact(hs_token, batch, anchor, s["name"], s["stripe_email"], s["hubspot_email"], deal_amount, s["deal_offset_min"], s["stage"], dry_run)
 
     # Collect expectation metrics before execution
     for s in dataset["exceptions"]:
         expected_exceptions.append({"type": s["kind"], "key": s["key"], "amount": s["amount"]})
     for s in dataset["hostile"]:
-        must_match_keys.append(s["key"])
-    for s in dataset["fee_tolerance_matches"]:
         must_match_keys.append(s["key"])
 
     if dry_run:
@@ -309,8 +307,6 @@ def run(dry_run: bool, force: bool, max_workers: int = 8) -> None:
             process_exception_item(s)
         for s in dataset["hostile"]:
             process_hostile_item(s)
-        for s in dataset["fee_tolerance_matches"]:
-            process_exception_item(s)
         d = dataset["declined"]
         seed_charge(batch, anchor, d["key"], d["name"], d["email"], d["amount"], d["charge_offset_min"], dry_run, token=d["stripe_token"])
     else:
@@ -323,8 +319,6 @@ def run(dry_run: bool, force: bool, max_workers: int = 8) -> None:
                 futures.append(executor.submit(process_exception_item, s))
             for s in dataset["hostile"]:
                 futures.append(executor.submit(process_hostile_item, s))
-            for s in dataset["fee_tolerance_matches"]:
-                futures.append(executor.submit(process_exception_item, s))
 
             d = dataset["declined"]
             futures.append(executor.submit(

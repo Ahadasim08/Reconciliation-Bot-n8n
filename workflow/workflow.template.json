@@ -490,7 +490,7 @@
       ],
       "id": "457f9e48-1d54-4924-8152-6a1e6b35fd8b",
       "name": "Slack",
-      "onError": "continueRegularOutput"
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -959,6 +959,18 @@
         [
           {
             "node": "Mark Run Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Failure Alert",
             "type": "main",
             "index": 0
           }

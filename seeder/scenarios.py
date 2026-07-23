@@ -149,28 +149,29 @@ PLANTED_EXCEPTIONS = [
     },
 ]
 
-# PLAN.md §5 lists Jenna as a planted REVIEW exception, but §7.2's worked
-# example + §6's scoring table both say a 2.98% gap clears the fee-tolerance
-# band and auto-matches at confidence 85 — a genuine contradiction in the
-# locked plan. Resolved 2026-07-23 (Ahad, user call): §7.2/§6 win, matcher.js
-# already implements it that way. Kept structurally separate from
-# HOSTILE_CASES (whose must_match seeding fn assumes charge amount == deal
-# amount) since this case's whole point is charge amount != deal amount.
-FEE_TOLERANCE_MATCHES = [
+HOSTILE_CASES = [
     {
+        # Not actually hostile in the email/casing sense — this is the
+        # fee-tolerance boundary case ($1,940.50 vs $2,000, 2.98% gap,
+        # inside the default 3.5% feeTolerance). Score lands at exactly 85
+        # (email +50, fee-tolerance amount +25, timestamp +10), which
+        # PLAN.md §6/§7.2's own worked example says auto-matches — it must
+        # NOT fire as an exception. Was wrongly listed under
+        # PLANTED_EXCEPTIONS as a REVIEW case; moved here per Ahad/Murad
+        # agreement after PLAN.md's §5 table and §7.2 worked example were
+        # found to contradict each other (§7.2 wins — it's the more
+        # specific, worked-through rule).
         "key": "jenna_review",
         "kind": "must_match",
         "name": "Jenna Ortiz",
-        "email": "jenna.ortiz@quarrystone.com",
+        "stripe_email": "jenna.ortiz@quarrystone.com",
+        "hubspot_email": "jenna.ortiz@quarrystone.com",
         "amount": 1940.50,
-        "deal_amount": 2000.00,  # 2.98% gap, inside default 3.5% feeTolerance
+        "deal_amount": 2000.00,
         "charge_offset_min": 900,
         "deal_offset_min": 905,
         "stage": "closedwon",
     },
-]
-
-HOSTILE_CASES = [
     {
         "key": "sarah_casing",
         "kind": "must_match",
@@ -274,16 +275,12 @@ def build_dataset(anchor=None):
     for s in HOSTILE_CASES:
         payments_expected += 1
         deals_expected += 1
-    for s in FEE_TOLERANCE_MATCHES:
-        payments_expected += 1
-        deals_expected += 1
 
     return {
         "anchor": anchor,
         "clean": clean_scenarios(),
         "exceptions": PLANTED_EXCEPTIONS,
         "hostile": HOSTILE_CASES,
-        "fee_tolerance_matches": FEE_TOLERANCE_MATCHES,
         "declined": DECLINED_CHARGE,
         "payments_expected": payments_expected,
         "deals_expected": deals_expected,

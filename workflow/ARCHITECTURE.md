@@ -75,17 +75,23 @@ flowchart LR
 
 ## Error handling
 
-`On Error: Continue (using error output)` set on: Insert Run, Upsert Exception,
-Insert Match, Append row in sheet. Plain `Continue` on Slack (its own failure
-isn't wired anywhere — by the time it runs, Postgres + Sheets have already
-succeeded, so a webhook 404 shouldn't flip a genuinely-ok run to failed).
+`On Error: Continue (using error output)` set on: Get many charges, Get many
+deals, Get a contact, Insert Run, Upsert Exception, Insert Match, Append row
+in sheet, Slack (PLAN.md §5's nodes 3/4/5/11/12/14). All six routes verified
+in `workflow.json`/`workflow.template.json`; live canvas needs a re-import to
+pick them up (see Blockers — full delete before re-import, don't import on
+top of an existing same-named workflow).
 
 | Error output | Routes to | Why |
 |---|---|---|
+| Get many charges | `Failure Alert` directly | No `runs` row exists yet — nothing for `Mark Run Failed` to update |
+| Get many deals | `Failure Alert` directly | Same |
+| Get a contact | `Failure Alert` directly | Same |
 | Insert Run | `Failure Alert` directly | No `runs` row exists yet — nothing for `Mark Run Failed` to update |
 | Upsert Exception | `Mark Run Failed` → `Failure Alert` | Run row already exists by this point |
 | Insert Match | `Mark Run Failed` → `Failure Alert` | Same |
 | Append row in sheet | `Mark Run Failed` → `Failure Alert` | Same |
+| Slack | `Failure Alert` directly, not `Mark Run Failed` | Postgres + Sheets already succeeded by the time Slack posts — the recon data is correct, so the run itself shouldn't be marked failed. But swallowing it silently (the old `continueRegularOutput` behavior) left zero signal on a genuinely broken notification path, so it now alerts without corrupting run status. |
 
 `Mark Run Failed` — Postgres, `UPDATE runs SET status='failed', error=$1 WHERE id=$2`.
 `Failure Alert` — HTTP Request, POSTs a plain failure notice to the same Slack webhook.

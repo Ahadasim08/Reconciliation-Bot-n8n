@@ -89,6 +89,17 @@ describe('formatSlackMessage', () => {
     expect(message.blocks).toHaveLength(12);
     expect(message.blocks[11].text.text).toBe('…and 2 more, see sheet.');
   });
+
+  it('never exceeds Slack\'s 50-block limit even if config asks for more', () => {
+    const exceptions = Array.from({ length: 200 }, (_, i) =>
+      ({ type: 'PAYMENT_NO_DEAL', payment: payment({ id: `ch_${i}` }), unmatchable: false })
+    );
+    const matchResult = { ...emptyMatch, unmatchedPayments: exceptions.map((e) => e.payment) };
+
+    const message = formatSlackMessage(matchResult, exceptions, { maxExceptionsInMessage: 500 });
+
+    expect(message.blocks.length).toBeLessThanOrEqual(50);
+  });
 });
 
 describe('formatSheetRows', () => {
