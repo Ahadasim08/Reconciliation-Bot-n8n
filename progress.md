@@ -1,13 +1,14 @@
 # Progress
 
-**Last updated:** 2026-07-23 by Murad, session 13
+**Last updated:** 2026-07-23 by Murad, session 14
 **Current phase:** 5 — assembly (both). **Both real Phase 5 exit criteria
-(exact-count match, run-twice idempotency) are now satisfied, error branches
-are built and break-tested on all 6 required nodes, and the Jenna
-REVIEW-vs-match contradiction in PLAN.md is resolved.** What's left is polish/
-cleanup (webhook rotation, stale HubSpot leftovers, `subscriptionId`
-population, INSTALL.md finish) — see Next session. Prior state below, kept
-for history:
+(exact-count match, run-twice idempotency) are satisfied, error branches are
+built and break-tested on all 6 required nodes, and the Jenna
+REVIEW-vs-match contradiction in PLAN.md is resolved.** Session 14 closed out
+the rest of the polish list except two items that need a human action
+(webhook rotation, HubSpot credential handoff) and one item deliberately left
+for Ahad (`subscriptionId` population — his fetch-node ownership). See Next
+session. Prior state below, kept for history:
 
 **Session 12 status (superseded by session 13, kept for history):** The 82-vs-1 `PAYMENT_NO_DEAL` bug is
 fixed and verified.** Root cause: `Filter1`'s deals window only covered
@@ -285,6 +286,16 @@ it's always `null` in fixtures, a no-op for the exclusion logic. 3 new tests.
       `must_match` case, `seed.py`'s `process_hostile_item` gained
       `deal_amount` fallback support (she's the first hostile case with a
       genuine charge≠deal amount), `expected.json` regenerated/hand-corrected
+- [x] `classify.js` refunded-charge duplicate-detection fix committed (was
+      sitting uncommitted, undocumented, from a prior session)
+- [x] Slack block-kit 50-block limit — `src/format.js` now clamps
+      `maxExceptionsInMessage` so total blocks can never exceed 50, test added,
+      `workflow.json` rebuilt (needs live re-import to take effect)
+- [x] `docs/INSTALL.md` finished — steps 5-8 confirmed accurate, stale status
+      note removed, PowerShell schema-load command added, Slack section
+      corrected to match the `$env.SLACK_WEBHOOK_URL` fix
+- [x] 7 `spike:phase0` HubSpot deals — confirmed already gone, no cleanup
+      needed
 
 **Phase 5 in progress (session 9, Murad).** Pulled Ahad's nodes 1-6 export
 (`workflow/workflow.template.json`). Built nodes 7-14 by hand in n8n: `Normalize`,
@@ -342,6 +353,53 @@ rows, but `expected.json` plants exactly 5 exceptions. Could be legitimate
 (re-seeding without `teardown.py` between sessions accumulates records within
 the lookback window) or a real classify/window bug — needs the Postgres branch
 working first (so `runs`/`matches` counts can be cross-checked) before digging in.
+
+### Session 14 — 2026-07-23 (Murad)
+- Started by discovering session 13's work was never committed (error
+  branches, Jenna fix, workflow.json/template.json changes) — plus an
+  undocumented, already-tested fix sitting in the working tree: `classify.js`
+  now excludes refunded charges from `isDuplicateOf`, so an old refunded
+  charge from a stale prior seed cycle can't false-positive as a duplicate
+  against a same-amount charge in a later cycle (this is what caused
+  session 12/13's David/cross-batch `DUPLICATE_CHARGE` mislabeling — it's
+  fixed now, not just explained away). Committed all of it as one session-13
+  close-out commit (`0138baf`) before doing anything else this session.
+- Closed Next-session item 6 (spike:phase0 HubSpot leftovers): searched
+  HubSpot directly for the literal `dealname == "spike:phase0"` — 0 found.
+  Already clean (cleaned up sometime between session 12 and now, untracked —
+  no code change needed).
+- Closed Next-session item 4 (Slack block-kit 50-block limit): did the math
+  instead of needing a live run — `formatSlackMessage` emits 1 headline + up
+  to `maxExceptionsInMessage` lines + 1 optional overflow line, so at the
+  default config (10) it's structurally capped at 12 blocks, nowhere near 50.
+  But nothing stopped a future config value from breaking that — added a
+  `SLACK_MAX_BLOCKS`-based clamp in `src/format.js` so the block count can
+  never exceed 50 regardless of what `maxExceptionsInMessage` is set to. New
+  test proves it holds even at `maxExceptionsInMessage: 500`. 58/58 passing.
+  Ran `npm run build` to bake the fix into `workflow.json`'s Format Code node
+  — **needs a live canvas re-import to actually take effect**, not done yet.
+- Closed Next-session item 5: removed `docs/INSTALL.md`'s stale "Phase 5
+  still in progress" status note (all 8 steps have been accurate for a
+  while), added the PowerShell schema-load command alongside the bash one
+  (the `<` redirection problem hit and solved in session 9 — doc only had
+  the bash version), and corrected step 5's Slack section: it described
+  pasting the webhook URL directly into the HTTP node, but session 9/10
+  already moved that to `{{ $env.SLACK_WEBHOOK_URL }}` via
+  `docker-compose.yml` — doc was describing the pre-fix behavior.
+- Investigated Next-session item 3 (`subscriptionId` population) enough to
+  scope it, then deliberately did NOT implement it — see Decisions log.
+  Confirmed via the n8n container's own `Stripe.node.js`/`ChargeDescription`
+  source that the native Stripe node's `charge: getAll` operation has no
+  `expand` parameter at all in the UI; populating the real field means
+  swapping `Get many charges` for an HTTP Request node hitting `/v1/charges`
+  with `expand[]=invoice` and hand-rolling Stripe's pagination, which the
+  built-in node currently does for free. Real, contained piece of work, but
+  it's Ahad's owned fetch node (PLAN.md §5 ownership split) and was never a
+  Phase 5 exit blocker — left as the standing next-session item instead of
+  redesigning his node solo.
+- Did not do: webhook rotation (needs the user's own Slack access, not
+  something this session can do), HubSpot credential handoff to Ahad (same —
+  a private-channel action between the two people, not a file/code change).
 
 ## Session log
 ### Session 1 — 2026-07-17
@@ -942,28 +1000,31 @@ working first (so `runs`/`matches` counts can be cross-checked) before digging i
 ## Next session — start here
 **Both real Phase 5 exit criteria (exact count, idempotency) are met, error
 branches are built and break-tested, and the Jenna contradiction is resolved.
-What's left is cleanup/polish, not open bugs.**
+Session 14 closed the block-kit-limit, INSTALL.md, and spike-cleanup items.
+What's left is two human actions and one deliberately-deferred fetch-node
+item, not open bugs.**
 1. Rotate the Slack webhook (good hygiene — it was hardcoded locally for a
-   while, even though never pushed to a public remote).
+   while, even though never pushed to a public remote). Needs whoever owns
+   the Slack app, not a code change.
 2. Get Murad's HubSpot credential value to Ahad via a private channel (not
    chat, not committed) so Ahad can add it to his own n8n instance and
    re-select it on the imported HubSpot nodes.
-3. Still open, still Phase-5-fetch-node scope, not forgotten: real
+3. Still open, still Ahad's Phase-5-fetch-node scope, not forgotten: real
    `subscriptionId` population from the Stripe API (always `null` currently).
-4. Verify `formatSlackMessage`'s block-kit output against Slack's real
-   50-blocks-per-message limit once a run has enough exceptions to hit it.
-5. Finish `docs/INSTALL.md` steps 5-8 now that `workflow.json` is stable.
-6. Clean up the 7 `spike:phase0` leftover HubSpot deals (see Blockers) —
-   manual delete or extend `teardown.py` to also match that tag.
-7. Remember: after any future canvas re-import, `Upsert Exception`'s and
-   `Insert Match`'s "Query Batching" option must be re-checked/re-set to
-   `Independently` — it's a live n8n node setting, not stored in the
-   committed JSON in a way that's obviously visible, and reset behavior on
-   reimport hasn't been fully characterized.
-8. Once 1-6 are done, formally decide with Ahad whether Phase 5 can CLOSE —
+   Scoped this session (see session 14 log/Decisions log) — swap `Get many
+   charges` from the native Stripe node to an HTTP Request node with
+   `expand[]=invoice`, hand-roll pagination. Left for Ahad since it's his node.
+4. **`workflow.json` changed this session (format.js block-limit clamp) —
+   needs a full canvas delete + clean re-import before the next live run**,
+   per the standing re-import rule. After re-importing: re-check
+   `Upsert Exception`'s and `Insert Match`'s "Query Batching" option is still
+   set to `Independently` (live n8n setting, not visible in the committed
+   JSON, reset behavior on reimport not fully characterized) — same reminder
+   carried from before, now doubly relevant since a reimport is actually due.
+5. Once 1-3 are done, formally decide with Ahad whether Phase 5 can CLOSE —
    the two hard exit criteria (exact count, idempotency) are satisfied, so
    this is mostly a scope/completeness call at that point, not a blocker.
-9. Note for whoever runs the next verification: raw `select count(*) from
+6. Note for whoever runs the next verification: raw `select count(*) from
    exceptions where run_id = ...` will likely NEVER read exactly 4/5 again in
    this shared Stripe sandbox (charges never delete, only refund — stale
    cross-batch noise is permanent). Use the per-scenario method from session
@@ -1001,3 +1062,4 @@ What's left is cleanup/polish, not open bugs.**
 | 2026-07-23 | `Slack` node's error output routes to `Failure Alert` directly, NOT `Mark Run Failed` | By the time `Slack` runs, Postgres + Sheets have already succeeded — the recon data is correct, so the run itself shouldn't be marked `failed` in the `runs` table. But the old behavior (`continueRegularOutput`, no branch at all) left zero signal on a genuinely broken notification path. Alerts without corrupting run status. |
 | 2026-07-23 | Phase 5's exact-count/idempotency exit criteria are verified via per-scenario cross-check (real Stripe charge IDs via the API), not raw `select count(*) from exceptions` | Stripe test charges can never be deleted, only refunded — this shared sandbox has accumulated many past seed cycles whose charges permanently re-enter any date window. Raw counts will structurally never read exactly 4/5 again. This isn't a workaround for one bad day, it's the standing verification method going forward. |
 | 2026-07-23 | Jenna (`jenna_review`) is a `must_match` hostile case, not a planted `REVIEW` exception | PLAN.md self-contradicted: §5's exceptions table said `REVIEW`, but §6's scoring table (`>=85 auto-match`) and §7.2's worked example (same exact dollar figures) both said she auto-matches. Her real score is exactly 85. Ahad's call: §7.2/§6 wins (deeper, worked-through rule) — §5's table was the stale draft. `scenarios.py`/`seed.py`/`expected.json` updated accordingly. This is a deliberate, authorized deviation from PLAN.md §1 point 2's literal "5 planted exceptions" wording — logged here per CLAUDE.md's "say so, don't silently deviate" rule. |
+| 2026-07-23 | `subscriptionId` population left unimplemented, scoped but not built | Requires swapping the native `Get many charges` Stripe node for an HTTP Request node (`expand[]=invoice` — the native node's `getAll` charge operation has no expand param at all, confirmed via the n8n container's own node source) plus hand-rolled pagination. Real, contained work, but it's Ahad's owned fetch node per PLAN.md §5's ownership split, and it was never a Phase 5 exit blocker — logged here instead of redesigning his node solo mid-session. |

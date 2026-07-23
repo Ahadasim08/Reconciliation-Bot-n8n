@@ -2,6 +2,11 @@ const DEFAULT_CONFIG = {
   maxExceptionsInMessage: 10,
 };
 
+// Slack rejects a message over 50 blocks. 1 headline block + N exception
+// lines + 1 optional "…and N more" line must never exceed that regardless
+// of config.
+const SLACK_MAX_BLOCKS = 50;
+
 // DUPLICATE_CHARGE and PAYMENT_NO_DEAL first (money is wrong right now),
 // REVIEW last. Middle order is our own call: ORPHAN_REFUND (money already
 // moved backwards) before AMOUNT_MISMATCH before DEAL_NO_PAYMENT (deal is
@@ -71,7 +76,8 @@ export function formatSlackMessage(matchResult, exceptions, config) {
   const ordered = [...exceptions].sort(
     (a, b) => SEVERITY_ORDER.indexOf(a.type) - SEVERITY_ORDER.indexOf(b.type)
   );
-  const shown = ordered.slice(0, cfg.maxExceptionsInMessage);
+  const maxLines = Math.min(cfg.maxExceptionsInMessage, SLACK_MAX_BLOCKS - 2);
+  const shown = ordered.slice(0, maxLines);
   const remaining = ordered.length - shown.length;
 
   const lines = shown.map(exceptionLine);
