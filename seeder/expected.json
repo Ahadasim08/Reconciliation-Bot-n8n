@@ -1,10 +1,10 @@
 {
-  "batch": "seed:batch-1784701139",
-  "window_start": "2026-07-22T00:00:00+00:00",
-  "window_end": "2026-07-22T23:59:59+00:00",
+  "batch": "seed:batch-1784796122",
+  "window_start": "2026-07-23T00:00:00+00:00",
+  "window_end": "2026-07-23T23:59:59+00:00",
   "payments_expected": 46,
   "deals_expected": 45,
-  "exceptions_expected": 5,
+  "exceptions_expected": 4,
   "exceptions": [
     {
       "type": "DUPLICATE_CHARGE",
@@ -25,11 +25,6 @@
       "type": "ORPHAN_REFUND",
       "key": "tom_orphan_refund",
       "amount": 1100.0
-    },
-    {
-      "type": "REVIEW",
-      "key": "jenna_review",
-      "amount": 1940.5
     }
   ],
   "must_match_not_flag": [
@@ -37,7 +32,8 @@
     "jenna_plustag",
     "raj_midnight",
     "john_smith_a",
-    "john_smith_b"
+    "john_smith_b",
+    "jenna_review"
   ],
   "note": "declined charge (tok_chargeDeclined) intentionally excluded from payments_expected"
 }

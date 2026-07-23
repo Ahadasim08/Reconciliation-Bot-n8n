@@ -147,9 +147,19 @@ PLANTED_EXCEPTIONS = [
         "deal_offset_min": 310,
         "stage": "closedwon",
     },
+]
+
+# PLAN.md §5 lists Jenna as a planted REVIEW exception, but §7.2's worked
+# example + §6's scoring table both say a 2.98% gap clears the fee-tolerance
+# band and auto-matches at confidence 85 — a genuine contradiction in the
+# locked plan. Resolved 2026-07-23 (Ahad, user call): §7.2/§6 win, matcher.js
+# already implements it that way. Kept structurally separate from
+# HOSTILE_CASES (whose must_match seeding fn assumes charge amount == deal
+# amount) since this case's whole point is charge amount != deal amount.
+FEE_TOLERANCE_MATCHES = [
     {
         "key": "jenna_review",
-        "kind": "REVIEW",
+        "kind": "must_match",
         "name": "Jenna Ortiz",
         "email": "jenna.ortiz@quarrystone.com",
         "amount": 1940.50,
@@ -264,12 +274,16 @@ def build_dataset(anchor=None):
     for s in HOSTILE_CASES:
         payments_expected += 1
         deals_expected += 1
+    for s in FEE_TOLERANCE_MATCHES:
+        payments_expected += 1
+        deals_expected += 1
 
     return {
         "anchor": anchor,
         "clean": clean_scenarios(),
         "exceptions": PLANTED_EXCEPTIONS,
         "hostile": HOSTILE_CASES,
+        "fee_tolerance_matches": FEE_TOLERANCE_MATCHES,
         "declined": DECLINED_CHARGE,
         "payments_expected": payments_expected,
         "deals_expected": deals_expected,

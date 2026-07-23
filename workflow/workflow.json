@@ -34,7 +34,7 @@
             {
               "id": "1c5781dc-11af-4d24-bb50-3b651f886393",
               "name": "window_end",
-              "value": "={{ $now.plus({hours:1}).toUTC().toISO() }}",
+              "value": "={{ $now.startOf('day').toUTC().toISO() }}",
               "type": "string"
             },
             {
@@ -75,7 +75,8 @@
           "id": "h8iD5QVOB9kogLK8",
           "name": "Stripe account"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -117,7 +118,8 @@
         192
       ],
       "id": "56628750-49aa-4b52-a057-b329bf6b2c16",
-      "name": "Filter"
+      "name": "Filter",
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -149,7 +151,8 @@
           "id": "68V9F2H8THTYmeKE",
           "name": "HubSpot account 2"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -191,7 +194,8 @@
         464
       ],
       "id": "fc581327-e326-4d04-9efd-28f01315cc39",
-      "name": "Filter1"
+      "name": "Filter1",
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -199,7 +203,7 @@
         "operation": "get",
         "contactId": {
           "__rl": true,
-          "value": "={{ $json.associations.associatedVids[0] }}\n",
+          "value": "={{ $json.associations.associatedVids[0] }}",
           "mode": "id"
         },
         "additionalFields": {
@@ -227,7 +231,8 @@
           "id": "kOXNsOMTZNMkuUOy",
           "name": "HubSpot account 3"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -266,7 +271,8 @@
         368
       ],
       "id": "cf2f1aae-4291-4a17-87c0-6412f207f69d",
-      "name": "Match"
+      "name": "Match",
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -279,7 +285,8 @@
         368
       ],
       "id": "6678f27d-c643-48be-8ced-c8a9e9a2583e",
-      "name": "Classify"
+      "name": "Classify",
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -611,9 +618,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE runs SET status='failed', error=$1 WHERE id=$2;",
+        "query": "UPDATE runs SET status='failed', error=$1 WHERE id=(SELECT id FROM runs ORDER BY id DESC LIMIT 1);",
         "options": {
-          "queryReplacement": "={{ $json.error?.message || 'unknown error' }}, {{ $('Insert Run').first().json.id }}"
+          "queryReplacement": "={{ $json.error?.message || 'unknown error' }}"
         }
       },
       "type": "n8n-nodes-base.postgres",
@@ -669,6 +676,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Failure Alert",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -680,6 +694,13 @@
             "type": "main",
             "index": 1
           }
+        ],
+        [
+          {
+            "node": "Failure Alert",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -688,6 +709,13 @@
         [
           {
             "node": "Filter1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failure Alert",
             "type": "main",
             "index": 0
           }
@@ -704,6 +732,13 @@
           },
           {
             "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failure Alert",
             "type": "main",
             "index": 0
           }
@@ -729,6 +764,13 @@
             "type": "main",
             "index": 1
           }
+        ],
+        [
+          {
+            "node": "Failure Alert",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -751,6 +793,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Failure Alert",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -764,6 +813,13 @@
           },
           {
             "node": "Insert Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failure Alert",
             "type": "main",
             "index": 0
           }

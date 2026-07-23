@@ -75,7 +75,8 @@
           "id": "h8iD5QVOB9kogLK8",
           "name": "Stripe account"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -117,7 +118,8 @@
         -128
       ],
       "id": "c303ca71-ed67-45b8-82e8-933559d05ac4",
-      "name": "Filter"
+      "name": "Filter",
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -149,7 +151,8 @@
           "id": "68V9F2H8THTYmeKE",
           "name": "HubSpot account 2"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -191,7 +194,8 @@
         144
       ],
       "id": "2e4d35b5-18c4-4ec8-b854-3a2b53158d6c",
-      "name": "Filter1"
+      "name": "Filter1",
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -199,7 +203,7 @@
         "operation": "get",
         "contactId": {
           "__rl": true,
-          "value": "={{ $json.associations.associatedVids[0] }}\n",
+          "value": "={{ $json.associations.associatedVids[0] }}",
           "mode": "id"
         },
         "additionalFields": {
@@ -227,7 +231,8 @@
           "id": "kOXNsOMTZNMkuUOy",
           "name": "HubSpot account 3"
         }
-      }
+      },
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -266,7 +271,8 @@
         48
       ],
       "id": "5c2b33c4-7b56-46e7-927f-22e83b9e3dbd",
-      "name": "Match"
+      "name": "Match",
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -279,7 +285,8 @@
         48
       ],
       "id": "fa70b642-7c9f-4536-a9f5-ca089a513f7e",
-      "name": "Classify"
+      "name": "Classify",
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -609,9 +616,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE runs SET status='failed', error=$1 WHERE id=$2;",
+        "query": "UPDATE runs SET status='failed', error=$1 WHERE id=(SELECT id FROM runs ORDER BY id DESC LIMIT 1);",
         "options": {
-          "queryReplacement": "={{ $json.error?.message || 'unknown error' }}, {{ $('Insert Run').first().json.id }}"
+          "queryReplacement": "={{ $json.error?.message || 'unknown error' }}"
         }
       },
       "type": "n8n-nodes-base.postgres",
@@ -667,6 +674,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Failure Alert",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -678,6 +692,13 @@
             "type": "main",
             "index": 1
           }
+        ],
+        [
+          {
+            "node": "Failure Alert",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -686,6 +707,13 @@
         [
           {
             "node": "Filter1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failure Alert",
             "type": "main",
             "index": 0
           }
@@ -702,6 +730,13 @@
           },
           {
             "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failure Alert",
             "type": "main",
             "index": 0
           }
@@ -727,6 +762,13 @@
             "type": "main",
             "index": 1
           }
+        ],
+        [
+          {
+            "node": "Failure Alert",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -749,6 +791,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Failure Alert",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -762,6 +811,13 @@
           },
           {
             "node": "Insert Run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failure Alert",
             "type": "main",
             "index": 0
           }
