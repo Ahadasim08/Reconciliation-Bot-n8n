@@ -57,6 +57,13 @@ describe('summarize', () => {
 });
 
 describe('formatSlackMessage', () => {
+  it('empty day: zero charges and zero deals posts "nothing to reconcile", does not crash', () => {
+    const message = formatSlackMessage(emptyMatch, [], {});
+
+    expect(message.blocks).toHaveLength(1);
+    expect(message.blocks[0].text.text).toContain('0 payments · 0 clean · 0 exceptions · $0.00 unreconciled');
+  });
+
   it('posts a headline even with zero exceptions — a silent bot is a broken bot', () => {
     const matchResult = { ...emptyMatch, matched: [{ payment: payment({}), deal: deal({}), confidence: 100, reasons: [] }] };
 
@@ -66,11 +73,14 @@ describe('formatSlackMessage', () => {
     expect(message.blocks[0].text.text).toContain('1 payments · 1 clean · 0 exceptions · $0.00 unreconciled');
   });
 
-  it('empty day — zero charges in, does not crash, still posts a headline', () => {
-    const message = formatSlackMessage(emptyMatch, [], {});
+  it('flags an unmatchable PAYMENT_NO_DEAL (no email) with the reason a human needs', () => {
+    const p = payment({ id: 'ch_noemail', email: null, name: null });
+    const exceptions = [{ type: 'PAYMENT_NO_DEAL', payment: p, unmatchable: true }];
+    const matchResult = { ...emptyMatch, unmatchedPayments: [p] };
 
-    expect(message.blocks).toHaveLength(1);
-    expect(message.blocks[0].text.text).toContain('0 payments · 0 clean · 0 exceptions · $0.00 unreconciled');
+    const message = formatSlackMessage(matchResult, exceptions, {});
+
+    expect(message.blocks[1].text.text).toContain('no email — cannot match');
   });
 
   it('orders DUPLICATE_CHARGE and PAYMENT_NO_DEAL before REVIEW', () => {

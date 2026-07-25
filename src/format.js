@@ -54,7 +54,8 @@ function exceptionLine(exception) {
   const customer = escapeMrkdwn(exceptionCustomer(exception) || 'unknown');
   const amount = exceptionAmount(exception);
   const amountStr = amount != null ? `$${amount.toFixed(2)}` : 'unknown amount';
-  return `*${exception.type}* — ${customer} — ${amountStr}`;
+  const reason = exception.unmatchable ? ' — no email — cannot match' : '';
+  return `*${exception.type}* — ${customer} — ${amountStr}${reason}`;
 }
 
 export function summarize(matchResult, exceptions) {
