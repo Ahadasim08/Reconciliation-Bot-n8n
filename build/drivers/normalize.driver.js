@@ -12,6 +12,15 @@ const rawCharges = $('Filter').all().map((i) => i.json);
 const rawDeals = $('Filter1').all().map((i) => i.json);
 const rawContacts = $('Get a contact').all().map((i) => i.json);
 
+// Keyed by HubSpot contact vid, NOT by array position: "Get a contact" runs
+// once per deal but its onError is continueErrorOutput, so one failed
+// lookup mid-batch drops that item from the success array and shifts every
+// contact after it out of alignment with rawDeals by position. Confirmed
+// live: with item 0's lookup forced to fail, positional zip put deal 0's
+// record on deal 1's real email. Keying by vid survives any subset/order of
+// successful lookups.
+const contactsByVid = new Map(rawContacts.map((c) => [String(c.vid), c]));
+
 // PLAN.md §7.2: zero-amount charges are Stripe card-validation artifacts,
 // ignore entirely. §7.4: declined charges never moved money, ignore too.
 const payments = rawCharges
@@ -33,8 +42,9 @@ const payments = rawCharges
     url: `https://dashboard.stripe.com/test/payments/${c.id}`,
   }));
 
-const deals = rawDeals.map((d, i) => {
-  const contact = rawContacts[i] || {};
+const deals = rawDeals.map((d) => {
+  const dealContactId = d.associations?.associatedVids?.[0];
+  const contact = contactsByVid.get(String(dealContactId)) || {};
   const props = d.properties || {};
   const cprops = contact.properties || {};
   const firstname = cprops.firstname?.value || '';

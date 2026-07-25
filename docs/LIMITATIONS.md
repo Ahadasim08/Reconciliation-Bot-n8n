@@ -74,25 +74,25 @@ real gaps found while re-reading `src/`, `build/drivers/`, and
   it so nobody mistakes the current `PAYMENT_NO_DEAL` count for "real"
   during a demo against non-USD test data.
 
-- **`Normalize`'s deal↔contact join is positional, not keyed — a real
-  latent risk, not verified live.** `build/drivers/normalize.driver.js`
-  pairs `rawDeals[i]` with `rawContacts[i]` by array index
-  (`const contact = rawContacts[i] || {}`). This assumes `Get a contact`
-  returns exactly one item per deal, in the same order `Filter1` emitted
-  them. Its `onError` is `continueErrorOutput`
-  (`workflow/workflow.json:235`) — meaning if a single deal's contact
-  lookup fails mid-batch, that failed item is routed to the error branch
-  and **drops out of the success array**, shifting every contact after it
-  one position out of alignment with its deal. The Phase 6 table's "deal
-  with no associated contact" row tests the case where a deal has *no*
-  email at all (contact join returns nothing usable) — it does not test a
-  contact lookup that errors *mid-batch* while others around it succeed,
-  which is the scenario that would actually trigger this. Not reproduced
-  live this session (would need a way to force one specific contact fetch
-  to fail without failing the whole batch). If this turns out to be real,
-  the fix is keying the join by HubSpot contact ID pulled off each deal's
-  association, not position — worth doing before this goes in front of a
-  client with a large, occasionally-flaky HubSpot free-tier batch.
+- ~~**`Normalize`'s deal↔contact join was positional, not keyed.**~~
+  **FIXED and confirmed live this session.** `build/drivers/normalize.driver.js`
+  used to pair `rawDeals[i]` with `rawContacts[i]` by array index. `Get a
+  contact`'s `onError` is `continueErrorOutput`
+  (`workflow/workflow.json`) — a single deal's contact lookup failing
+  mid-batch routes that item to the error branch and drops it from the
+  success array, shifting every contact after it one position out of
+  alignment. Reproduced live against the real stack: with 28 deals and one
+  contact lookup forced to fail, the deal whose lookup failed showed up in
+  `Normalize`'s output carrying the *next* deal's real customer email
+  (`john.smith@ironhidefitness.com`, confirmed via matching HubSpot contact
+  `vid` against the deal's `associations.associatedVids[0]`) — silently
+  wrong data, no error anywhere. Fixed by keying the join off each contact's
+  `vid` against each deal's `associations.associatedVids[0]` in a `Map`,
+  instead of trusting array position. Verified fresh live import runs clean
+  (no disabled nodes, original expressions, fix present). Not yet unit
+  tested — `normalize.driver.js` is n8n glue, outside `src/*.js`'s Vitest
+  coverage; worth a dedicated test fixture if this file ever gets pulled
+  into `src/`.
 
 - **No backfill path for a missed run.** PLAN.md §7.5 calls this out
   explicitly: if the nightly cron doesn't fire (host down, n8n down,
