@@ -7,9 +7,6 @@ real Docker/Stripe/HubSpot/Slack stack (session, 2026-07-25) and are
 recorded here per PLAN.md's "every one of these gets a row in
 LIMITATIONS.md or a test" rule.
 
-Drafted by Ahad during Phase 6 close-out (ownership of this file is
-Murad's per PLAN.md §5 — flagged for his review/rewrite, not final).
-
 ## Phase 6 break-test results
 
 | Break | Expected | Result | Covered by |
