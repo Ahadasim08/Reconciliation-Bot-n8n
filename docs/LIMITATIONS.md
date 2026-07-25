@@ -7,6 +7,15 @@ real Docker/Stripe/HubSpot/Slack stack (session, 2026-07-25) and are
 recorded here per PLAN.md's "every one of these gets a row in
 LIMITATIONS.md or a test" rule.
 
+This file is owned by Murad per PLAN.md §5's split (Ahad owns upstream/
+`INSTALL.md`, Murad owns downstream/`DECISIONS.md`/`LIMITATIONS.md`). The
+break-test table below was drafted by Ahad out of Phase 6 necessity and is
+verified accurate against the code as of this review — kept as-is. The
+"known, accepted limitations" section past it is rewritten below as my own
+review, not just a sign-off on the draft: it corrects one row, adds three
+real gaps found while re-reading `src/`, `build/drivers/`, and
+`workflow.json` directly rather than trusting the prior summary.
+
 ## Phase 6 break-test results
 
 | Break | Expected | Result | Covered by |
@@ -28,7 +37,8 @@ LIMITATIONS.md or a test" rule.
   recon schema (`runs`/`exceptions`/`matches`) live in the same Postgres
   container. A full Postgres outage takes n8n's scheduler down with it —
   there's no way to isolate "the recon DB is down" from "n8n itself is
-  down" without a second Postgres instance, which is out of scope.
+  down" without a second Postgres instance, which is out of scope for a
+  single-client deployment.
 - **Duplicate Slack alerts on cascading upstream failures.** If a fetch
   node fails AND a downstream node's own error handling also fires (e.g.
   `Get many charges` fails, then `Normalize` also errors trying to read
@@ -38,9 +48,74 @@ LIMITATIONS.md or a test" rule.
   `charge: getAll` operation has no `expand` parameter, so a real
   subscription ID can't be populated without swapping to a hand-rolled
   HTTP Request node with manual pagination. Scoped, not built — see
-  `progress.md`'s Next-session notes.
+  `progress.md`'s Next-session notes. Practical effect: `excludeSubscriptions`
+  (`src/classify.js`) is currently a no-op in production — every renewal
+  charge will false-positive as `PAYMENT_NO_DEAL` until this lands.
 - **Slack webhook still needs rotating** — was hardcoded locally for a
   while earlier in the project (never pushed to a public remote), good
   hygiene to rotate regardless.
 - Non-goals from PLAN.md §1 (no dashboard, no LLM in the matcher, no
   multi-currency, no GHL adapter) are deliberate scope cuts, not gaps.
+
+### Found on this review, not previously listed
+
+- **Currency mismatch produces no distinguishing signal.** `matcher.js`'s
+  `scorePair` returns `null` outright when `payment.currency !==
+  deal.currency` (`src/matcher.js:41`) — correct per PLAN.md §7.2 ("do not
+  silently compare"), but the pair simply never becomes a candidate. The
+  payment and deal each fall through to `unmatchedPayments`/
+  `unmatchedDeals` and get classified as ordinary `PAYMENT_NO_DEAL` /
+  `DEAL_NO_PAYMENT` — indistinguishable from a genuine untracked payment
+  or an open deal. A human looking at the Slack alert has no way to tell
+  "this is a currency mismatch, not a missing record" without pulling both
+  records and comparing manually. Covered by a matcher test (confirms no
+  match happens), not by a distinct exception type or reason string.
+  Multi-currency is already a v1 non-goal, so not fixing this — flagging
+  it so nobody mistakes the current `PAYMENT_NO_DEAL` count for "real"
+  during a demo against non-USD test data.
+
+- **`Normalize`'s deal↔contact join is positional, not keyed — a real
+  latent risk, not verified live.** `build/drivers/normalize.driver.js`
+  pairs `rawDeals[i]` with `rawContacts[i]` by array index
+  (`const contact = rawContacts[i] || {}`). This assumes `Get a contact`
+  returns exactly one item per deal, in the same order `Filter1` emitted
+  them. Its `onError` is `continueErrorOutput`
+  (`workflow/workflow.json:235`) — meaning if a single deal's contact
+  lookup fails mid-batch, that failed item is routed to the error branch
+  and **drops out of the success array**, shifting every contact after it
+  one position out of alignment with its deal. The Phase 6 table's "deal
+  with no associated contact" row tests the case where a deal has *no*
+  email at all (contact join returns nothing usable) — it does not test a
+  contact lookup that errors *mid-batch* while others around it succeed,
+  which is the scenario that would actually trigger this. Not reproduced
+  live this session (would need a way to force one specific contact fetch
+  to fail without failing the whole batch). If this turns out to be real,
+  the fix is keying the join by HubSpot contact ID pulled off each deal's
+  association, not position — worth doing before this goes in front of a
+  client with a large, occasionally-flaky HubSpot free-tier batch.
+
+- **No backfill path for a missed run.** PLAN.md §7.5 calls this out
+  explicitly: if the nightly cron doesn't fire (host down, n8n down,
+  Postgres down), today's window is still "yesterday" — the day that was
+  actually missed never gets checked, and its exceptions are silently
+  lost forever, not caught on the next successful run. PLAN.md's own
+  suggested fix (`--backfill <date>`) was never built. Manual recovery
+  today means hand-editing `Edit Fields`'s window and re-running once,
+  which works but isn't documented anywhere and isn't a real operational
+  path for a non-technical client.
+
+- **Unicode / IDN email domains are out of scope**, carried over from
+  PLAN.md §7.1 but never previously written down here. `normalizeEmail`
+  does a plain lowercase/trim/plus-strip — no IDNA normalization. An email
+  with a non-ASCII domain that Stripe and HubSpot each represent slightly
+  differently (Unicode vs. punycode) would fail to match with no specific
+  error, just an ordinary unmatched pair. Same category of problem as the
+  currency-mismatch row above: silent, not loud.
+
+- **Partial refunds are invisible in the report.** Documented at the
+  contract level (`docs/CONTRACT.md`'s `refunded` semantics) but worth
+  restating here since it's a real gap a client will notice: a $500
+  refund on an otherwise-matching $2,000 charge leaves `refunded: false`
+  and reports as a clean match, full stop — no `partial_refund` flag
+  exists yet. Money that came back is real revenue drift and currently
+  gets zero visibility in Slack or the Sheet.
