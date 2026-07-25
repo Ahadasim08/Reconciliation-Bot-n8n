@@ -526,7 +526,7 @@
         "operation": "executeQuery",
         "query": "INSERT INTO runs\n  (started_at, window_start, window_end, payments_fetched, deals_fetched, matched, exceptions, status)\nVALUES\n  ($1, $2, $3, $4, $5, $6, $7, 'ok')\nRETURNING id;",
         "options": {
-          "queryReplacement": "={{ $now.toISO() }}, {{ $('Edit Fields').item.json.window_start }}, {{ $('Edit Fields').item.json.window_end }}, {{ $json.matchResult.matched.length + $json.matchResult.review.length + $json.matchResult.unmatchedPayments.length }}, {{ $json.matchResult.matched.length + $json.matchResult.review.length + $json.matchResult.unmatchedDeals.length }}, {{ $json.matchResult.matched.length }}, {{ $json.exceptions.length }}"
+          "queryReplacement": "={{ [ $now.toISO(), $('Edit Fields').first().json.window_start, $('Edit Fields').first().json.window_end, $json.matchResult.matched.length + $json.matchResult.review.length + $json.matchResult.unmatchedPayments.length, $json.matchResult.matched.length + $json.matchResult.review.length + $json.matchResult.unmatchedDeals.length, $json.matchResult.matched.length, $json.exceptions.length ] }}"
         }
       },
       "type": "n8n-nodes-base.postgres",
