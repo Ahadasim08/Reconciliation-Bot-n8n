@@ -1,28 +1,25 @@
 # Progress
 
-**Last updated:** 2026-07-23 by Ahad + Murad (concurrent), session 13 —
-**Phase 5 CLOSED**
-**Current phase:** 6 (not started). Both Ahad and Murad independently worked
-Phase 5's close-out this session, in parallel, and independently converged on
-the same conclusion: Phase 5 exit criteria met. Ahad's canvas: exact exception
-count vs `expected.json` confirmed (4/4, exact types) on a clean same-day test
-run, confirmed idempotent on a second run (no doubling — `matches` growing
-per-run is correct, it's an append-only audit log), `Mark Run Failed`'s wiring
-gap fixed at the root (no longer references `$('Insert Run')`), error branches
-built on every previously-unhandled upstream node (`Get many charges`,
-`Filter`, `Get many deals`, `Filter1`, `Get a contact`, `Match`, `Classify`),
-`window_start`/`window_end` reverted to production values. Murad's canvas:
-same exit criteria independently verified, error branches built/break-tested
-on a different node set (fetch nodes + Postgres/Sheets/Slack, routing to
-`Failure Alert` or `Mark Run Failed` depending on whether a `runs` row exists
-yet at that point in the graph), plus a real fix Ahad's session didn't have —
-`classify.js` now excludes refunded charges from duplicate-charge detection,
-so an old refunded charge from a prior seed cycle can't false-positive against
-a same-amount charge in a later cycle — and the Slack 50-block clamp plus
-finished `docs/INSTALL.md`. Both independently resolved the Jenna PLAN.md
-contradiction the same way (§7.2/§6 wins). Merged both branches' work this
-session; see git history for the full concurrent session log from each side.
-**Days elapsed:** 7 / 21
+**Last updated:** 2026-07-25 by Ahad, session 15 —
+**Phase 6 CLOSED**
+**Current phase:** 7 (not started). Session 15 re-imported the n8n canvas
+clean (single workflow, credentials remapped, no duplicate nodes), then ran
+the full Phase 6 hardening table live against the real Docker/Stripe/HubSpot/
+Slack stack — all 10 break scenarios in PLAN.md's table confirmed, 4 real
+bugs found and fixed along the way (not just latent risks — every one
+reproduced live before being fixed): `queryBatching` never baked into the
+template so re-imports silently reverted to n8n's single-query default;
+`unmatchable` flag set by `classify.js` but never read by `format.js`, so
+"no email — cannot match" never reached Slack; `Normalize` had no error
+branch and crashed the whole execution when an upstream fetch failed instead
+of alerting cleanly; `Insert Run` was the one Postgres node never migrated
+off the banned comma-joined query pattern, invisible until a 250-charge
+pagination stress test exposed it. `docs/LIMITATIONS.md` written (Ahad
+drafted it — file is Murad's per PLAN.md §5 ownership, flagged for his
+review) covering all 10 break-test rows plus known accepted limitations.
+**Phase 6 formally CLOSED — read `docs/LIMITATIONS.md` before starting
+Phase 7.**
+**Days elapsed:** 9 / 21
 
 ## Phase 0 — 12-check results
 Ahad ran the upstream checks 2026-07-17 (Stripe test mode, HubSpot free tier private
@@ -344,6 +341,34 @@ it's always `null` in fixtures, a no-op for the exclusion logic. 3 new tests.
       section corrected to match the `$env.SLACK_WEBHOOK_URL` fix
 - [x] 7 `spike:phase0` HubSpot deals — confirmed already gone, no cleanup
       needed
+- [x] Canvas re-imported clean (session 15) — deleted stale workflow,
+      rebuilt `workflow.json`, credentials remapped to the live instance's
+      IDs via n8n API, single workflow on canvas, no duplicate nodes
+- [x] `queryBatching: independently` baked into `workflow.template.json`
+      for `Upsert Exception`/`Insert Match` (session 15) — was missing
+      entirely, defaulted to n8n's `single` mode on every fresh import,
+      silently undoing the session-11 fix each time
+- [x] `format.js` now surfaces the `unmatchable` flag as "no email —
+      cannot match" on `PAYMENT_NO_DEAL` Slack lines (session 15) —
+      `classify.js` set the flag, `format.js` never read it, 1 new test
+- [x] `Normalize` given an `onError` → `Failure Alert` branch (session 15)
+      — previously crashed the whole execution with an unhandled
+      "paired item"/"hasn't been executed" error whenever an upstream
+      fetch node failed, instead of alerting cleanly like every other node
+- [x] `Insert Run`'s `queryReplacement` fixed to the single-array-expression
+      form (session 15) — was the one Postgres node never migrated off the
+      comma-joined `{{ }}, {{ }}` pattern banned in the 2026-07-20 decision
+      log; broke under paired-item resolution once a 250-charge pagination
+      test pushed real volume through it
+- [x] **Phase 6 hardening — all 10 break scenarios in PLAN.md's table
+      confirmed live** (session 15): kill Postgres mid-run, revoke Stripe
+      key, seed 250 charges (pagination), run twice, empty day, deal with
+      no contact, null deal amount, charge with no email, clock skew,
+      Slack webhook 404. 5 covered by unit tests, 5 needed live infra and
+      are recorded in `docs/LIMITATIONS.md` instead, per PLAN.md's own
+      "LIMITATIONS.md or a test" rule. **Phase 6 CLOSED.**
+- [x] `docs/LIMITATIONS.md` written (session 15, Ahad — flagged for
+      Murad's review, it's his file per PLAN.md §5)
 
 **Phase 5 in progress (session 9, Murad).** Pulled Ahad's nodes 1-6 export
 (`workflow/workflow.template.json`). Built nodes 7-14 by hand in n8n: `Normalize`,
@@ -483,6 +508,76 @@ not unilaterally — same rule applies here.
 real (not draft).
 
 ## Session log
+### Session 15 — 2026-07-25 (Ahad)
+- Re-imported the n8n canvas clean: deleted the stale workflow, rebuilt
+  `workflow.json`, remapped all 8 credential refs to this instance's live
+  credential IDs (file's baked-in IDs were from a different session/
+  instance), created fresh via the n8n public API. Verified all 4
+  credential types bound correctly and `queryBatching` correct on both
+  nodes that need it.
+- Found and fixed 4 real bugs, each reproduced live before being fixed
+  (not just spotted by inspection):
+  1. `queryBatching: independently` was never baked into
+     `workflow.template.json` for `Upsert Exception`/`Insert Match` — n8n's
+     default is `single`, so every fresh import silently reverted the
+     session-11 fix. Now explicit in the template, survives reimport.
+  2. `classify.js` sets `unmatchable: true` on a no-email `PAYMENT_NO_DEAL`,
+     but `format.js` never read the flag — the "no email — cannot match"
+     signal PLAN.md's Phase 6 table calls for never reached Slack. Fixed,
+     1 new test.
+  3. `Normalize` had no `onError` branch. When an upstream fetch node
+     failed (its own error branch worked fine and alerted), the execution
+     crashed downstream inside `Normalize` — `TypeError: Cannot assign to
+     read only property 'name' of object 'Error: Node 'Filter' hasn't been
+     executed'` — because it reads `$('Filter')`/`$('Filter1')`/`$('Get a
+     contact')` directly by name (a deliberate session-9 design choice)
+     and those nodes never ran when fed only from a failed fetch's empty
+     success output. Gave `Normalize` the same `onError` → `Failure Alert`
+     pattern every other pipeline node already has. Confirmed live:
+     execution now ends cleanly (`finished:true, status:success`) instead
+     of an unhandled top-level error.
+  4. `Insert Run`'s `queryReplacement` was still the comma-joined multi-
+     `{{ }}` pattern the 2026-07-20 decision log already banned (`Upsert
+     Exception`/`Insert Match` were migrated to the single
+     `={{ [ ... ] }}` array form back then, this node wasn't). Invisible
+     until a 250-charge pagination stress test pushed enough volume
+     through that `$('Edit Fields').item` couldn't resolve a single
+     paired item. Switched to `.first()` (doesn't depend on paired-item
+     tracking) inside a proper array expression. Confirmed fixed live —
+     run completed cleanly with `payments_fetched: 250`, no cap at 100.
+- Ran the full PLAN.md Phase 6 hardening table live against the real
+  stack, all 10 scenarios confirmed (5 via new/existing unit tests, 5 via
+  live verification recorded in the new `docs/LIMITATIONS.md`):
+  kill Postgres mid-run (found: n8n's own app DB and the recon schema
+  share one Postgres instance — killing it takes n8n's scheduler down
+  too, not just the recon write path; verified the actual write-path
+  failure mode instead via a simulated bad-table-name query), revoke the
+  Stripe key (this is what surfaced bug #3 above), seed 250 charges for
+  pagination (surfaced bug #4 above; used a standalone scratch script to
+  create/refund 250 tagged test charges, all 250 confirmed refunded after
+  a mid-run DNS blip needed a resume), run twice (surfaced bug #1 above;
+  actually got 3 consecutive runs due to a cron/deactivate timing race —
+  harmless, only strengthened the proof), empty day / deal-no-contact /
+  null-deal-amount / no-email-charge / clock-skew (all covered by
+  `test/*.test.js`, one of which needed the format.js fix above).
+- All live tests used temporary, fully-reverted changes: cron widened to
+  `*/1 * * * *` then reverted to `0 0 2 * * *` every time, test-only
+  Stripe credentials created and deleted (never touched the real shared
+  key), Slack URL temporarily pointed at a 404 URL then reverted to
+  `{{ $env.SLACK_WEBHOOK_URL }}`, window temporarily widened for the
+  pagination test then reverted to production values. Confirmed clean
+  after every single test: workflow inactive, real credentials bound, no
+  stray executions, no partial Postgres writes.
+- Wrote `docs/LIMITATIONS.md` — one row per Phase 6 break scenario plus a
+  "known, accepted limitations" section (shared Postgres instance,
+  duplicate Slack alerts on cascading failures, `subscriptionId` still
+  null, webhook still needs rotating). This file is Murad's per PLAN.md
+  §5 ownership split — drafted here only because Phase 6's own exit rule
+  needed it to close; flagged for his review/rewrite.
+- 4 commits, each isolated to the bug it fixes: `213ba78`, `188e3db`,
+  `c7bed61`, `ca6c4e2`. 60/60 tests passing throughout.
+- **Phase 6 formally CLOSED.**
+
 ### Session 1 — 2026-07-17
 - Wrote `docker-compose.yml`: n8n + Postgres 16-alpine, healthcheck-gated
   startup, named volumes (`postgres_data`, `n8n_data`)
@@ -1136,39 +1231,40 @@ real (not draft).
 | ~~`Mark Run Failed` wiring gap: `$('Insert Run')` unreachable~~ | Ahad | session 13 | **RESOLVED.** Root-cause fix, not a per-branch patch: since exactly one `runs` row exists per execution, dropped the `$('Insert Run')` node reference entirely — query now targets `id=(SELECT id FROM runs ORDER BY id DESC LIMIT 1)` instead of a second bound parameter. Works from any error branch regardless of graph position. Verified the SQL directly via `psql` in a rolled-back transaction. Fixed in `workflow.json`/`workflow.template.json`, not just live in the n8n UI. |
 | ~~7 `spike:phase0` HubSpot deals never cleaned up~~ | Murad | session 12 | **RESOLVED** — confirmed already gone, no cleanup needed (Murad checked directly, no longer present in the account). |
 | **Slack webhook still needs rotating** | Murad/Ahad | session 9 | Was hardcoded locally in `workflow.json`/`workflow.template.json` for a while (never pushed, since fixed to use `{{ $env.SLACK_WEBHOOK_URL }}`) — good hygiene to rotate it regardless. Not yet done. |
+| ~~`workflow.json` needed a full canvas delete + clean re-import, `queryBatching` reset behavior on reimport uncharacterized~~ | Ahad | session 13, resolved session 15 | **RESOLVED.** Re-imported clean via the n8n API. Confirmed the real answer to the open question: `queryBatching` is NOT preserved on reimport if it isn't explicitly in the node's `parameters.options` — it silently falls back to n8n's default (`single`), which is wrong for these two nodes. Fixed by baking `"queryBatching": "independently"` into `workflow.template.json` itself, so it's no longer a live-canvas-only setting that reimport can silently lose. |
+| **`Normalize`→`Failure Alert` and a failing fetch node's own `Failure Alert` can both fire for one root cause** | — | session 15 | Cosmetic double-alert on cascading upstream failures, not a correctness bug. Logged in `docs/LIMITATIONS.md`, not fixed. Would need either a single choke-point/guard node before `Normalize`, or deduping in `Failure Alert` itself — a real design decision, left for whoever picks this up. |
 
 ## Next session — start here
-**Phase 5 is CLOSED — verified independently by both Ahad and Murad this
-session. Do not restart it — pick up Phase 6 next, per PLAN.md.** Read
-PLAN.md's Phase 6 section for scope before starting anything.
+**Phase 6 is CLOSED — read `docs/LIMITATIONS.md` for the full break-test
+results before starting anything. Pick up Phase 7 next, per PLAN.md
+(`INSTALL.md`/`DECISIONS.md`/`LIMITATIONS.md`/README, split Ahad/Murad/both
+per §5).** Note: this session drafted `docs/LIMITATIONS.md` out of
+necessity (Phase 6's own exit rule required it), even though it's Murad's
+file per the ownership split — **Murad should review/rewrite it as his
+own**, not just accept Ahad's draft as final, especially the "known,
+accepted limitations" section which is meant to be his honest take.
 
-Housekeeping carried forward, not blocking Phase 6:
+Housekeeping carried forward, not blocking Phase 7:
 1. Rotate the Slack webhook (good hygiene — was hardcoded locally for a
    while earlier in the project, even though never pushed to a public
    remote). Needs whoever owns the Slack app, not a code change.
 2. Real `subscriptionId` population from the Stripe API (always `null`
-   currently) — Phase 5 fetch-node scope, still not implemented. Scoped this
-   session: swap `Get many charges` from the native Stripe node to an HTTP
-   Request node with `expand[]=invoice`, hand-roll pagination. Ahad's node,
-   his to pick up.
-3. `docs/INSTALL.md` finished (steps 5-8 done this session).
-4. Slack's 50-blocks-per-message limit now enforced in `format.js` (clamped
-   `maxExceptionsInMessage`), test added — no further action needed.
-5. **`workflow.json` changed this session (error branches, block-limit
-   clamp, window revert) — needs a full canvas delete + clean re-import**
-   before the next live run, per the standing re-import rule. After
-   re-importing: re-check `Upsert Exception`'s and `Insert Match`'s "Query
-   Batching" option is still set to the intended mode (`Independently` or
-   `Transaction`) — live n8n setting, not visible in the committed JSON,
-   reset behavior on reimport not fully characterized.
-6. HubSpot token and Google Sheets credential are shared between Ahad and
-   Murad (same account/same underlying Sheet) — confirmed again this
-   session, no separate per-person credential handoff needed.
-7. The exception-count noise from accumulated old Stripe test batches will
-   keep showing up on manual same-day test runs for the next few days until
-   those batches age out of the production "yesterday" window — expected,
-   not a bug, no action needed. Real production nightly runs (2am cron) are
-   unaffected since they only see truly-yesterday data.
+   currently) — Phase 5 fetch-node scope, still not implemented. Scoped in
+   session 14: swap `Get many charges` from the native Stripe node to an
+   HTTP Request node with `expand[]=invoice`, hand-roll pagination. Ahad's
+   node, his to pick up.
+3. Double `Failure Alert` on cascading upstream failures (see Blockers row
+   above) — cosmetic, not blocking, real design decision if fixed.
+4. The exception-count noise from accumulated old Stripe test batches
+   (including this session's 250-charge pagination test — all refunded,
+   but never deletable, so they'll still show up in raw counts until they
+   age out of the window) will keep showing up on manual same-day test
+   runs for a while — expected, not a bug. Real production nightly runs
+   (2am cron) are unaffected since they only see truly-yesterday data.
+5. The live n8n canvas is currently workflow id `qqLC263AL1oUrIYH`
+   (created session 15's re-import), inactive, production cron
+   (`0 0 2 * * *`), all 4 real credentials bound, no test/temp credentials
+   left over — confirmed clean at session close.
 
 ## Ideas parked (NOT doing, do not start)
 - Web dashboard — README extensions only
@@ -1202,3 +1298,6 @@ Housekeeping carried forward, not blocking Phase 6:
 | 2026-07-23 | `Slack` node's error output routes to `Failure Alert` directly, NOT `Mark Run Failed` | By the time `Slack` runs, Postgres + Sheets have already succeeded — the recon data is correct, so the run itself shouldn't be marked `failed` in the `runs` table. But the old behavior (`continueRegularOutput`, no branch at all) left zero signal on a genuinely broken notification path. Alerts without corrupting run status. |
 | 2026-07-23 | Phase 5's exact-count/idempotency exit criteria are verified via per-scenario cross-check (real Stripe charge IDs via the API) when raw counts are stale, not just `select count(*) from exceptions` | Stripe test charges can never be deleted, only refunded — this shared sandbox has accumulated many past seed cycles whose charges permanently re-enter any date window over time. This session's verification used a temporarily widened window to get a genuinely clean raw count (4/4 exact), but per-scenario cross-check via specific charge IDs remains the fallback method once stale noise reaccumulates. |
 | 2026-07-23 | `subscriptionId` population left unimplemented, scoped but not built | Requires swapping the native `Get many charges` Stripe node for an HTTP Request node (`expand[]=invoice` — the native node's `getAll` charge operation has no expand param at all, confirmed via the n8n container's own node source) plus hand-rolled pagination. Real, contained work, but it's Ahad's owned fetch node per PLAN.md §5's ownership split, and it was never a Phase 5 exit blocker — logged here instead of redesigning his node solo mid-session. |
+| 2026-07-25 | Phase 6's live-infra break scenarios (Postgres kill, Stripe key revoke, Slack 404, 250-charge pagination) tested against temporary/throwaway credentials and config, never the real shared Stripe key or Slack webhook | The real Stripe key and Slack webhook are shared with Murad — revoking or breaking them for a test would've broken his setup too. Used a deliberately-invalid temporary Stripe credential (created and deleted via the n8n API) and a temporarily-repointed Slack URL instead, both fully reverted after each test. Same real failure mode gets exercised either way (an auth/URL failure is an auth/URL failure to the node), without the blast radius. |
+| 2026-07-25 | "Kill Postgres mid-run" tested via a simulated bad-table-name query, not by actually stopping the Postgres container | n8n's own application database and the recon schema share one Postgres instance/container (`docker-compose.yml`'s single `postgres` service backs both `DB_POSTGRESDB_*` and the recon credential). Stopping the container takes n8n's own scheduler/API down with it, so there's no way to isolate "the recon DB is unreachable" from "n8n itself is down" — confirmed live (workflow API returned `503 Database is not ready!` the moment Postgres stopped). Logged as a real, accepted architectural limitation in `docs/LIMITATIONS.md` rather than treated as a test failure. |
+| 2026-07-25 | `docs/LIMITATIONS.md` drafted by Ahad this session, despite being Murad's file per PLAN.md §5 | Phase 6's own exit rule ("every scenario gets a row in LIMITATIONS.md or a test") required the file to exist before Phase 6 could close, and closing Phase 6 was this session's task. Explicitly flagged in Next-session notes for Murad to review and rewrite as his own rather than silently treat Ahad's draft as final — matches CLAUDE.md's "say so, don't silently deviate" spirit for crossing an ownership line out of necessity. |

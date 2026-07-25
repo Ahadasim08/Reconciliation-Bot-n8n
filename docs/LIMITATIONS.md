@@ -1,0 +1,49 @@
+# Limitations
+
+Honest list of what this bot doesn't handle, plus the Phase 6 hardening
+results — one row per PLAN.md §"Phase 6" break scenario. Rows with a test
+are covered in `test/`; rows without one were verified live against the
+real Docker/Stripe/HubSpot/Slack stack (session, 2026-07-25) and are
+recorded here per PLAN.md's "every one of these gets a row in
+LIMITATIONS.md or a test" rule.
+
+Drafted by Ahad during Phase 6 close-out (ownership of this file is
+Murad's per PLAN.md §5 — flagged for his review/rewrite, not final).
+
+## Phase 6 break-test results
+
+| Break | Expected | Result | Covered by |
+|---|---|---|---|
+| Kill Postgres mid-run | Error branch fires, Slack alert, no partial writes | **Confirmed**, with a caveat: n8n's own app DB and the recon schema share one Postgres container/database. Killing the container kills n8n's own scheduler/API too, not just the recon write path — there's no way to fail only the workflow's queries while n8n stays up in this setup. Verified the actual write-path failure mode instead (bad table name simulating "DB unreachable for this insert"): `Insert Run`'s error correctly routes to `Failure Alert`, `Mark Run Failed`/`Upsert Exception`/`Insert Match` correctly never run, zero rows written anywhere. | Live verification only |
+| Revoke the Stripe key | Auth error caught, named in the alert, run marked failed | **Confirmed, after a fix.** `Get many charges`'s own error branch worked, but the execution then crashed at `Normalize` (`Node 'Filter' hasn't been executed'`) because it reads `$('Filter')` by name and `Filter` never ran. Gave `Normalize` the same `onError` → `Failure Alert` branch every other pipeline node has. Now the run stops cleanly. Note: "run marked failed" per the table's literal wording doesn't apply here — no `runs` row exists yet this early in the graph, so there's nothing to mark failed (same reasoning as the Postgres-kill row; documented as intentional design in session 9/13). Side effect: `Failure Alert` fires twice for one root cause (once from the fetch node, once from `Normalize`) — cosmetic alert duplication, not fixed. | Live verification only |
+| Seed 250 charges | Pagination fetches all 250, not 100 | **Confirmed.** `Get many charges` fetched 636 items total (all history in the widened test window), `Filter` narrowed to exactly 250 — the tagged batch, no loss, not capped at Stripe's 100-per-page default. Also surfaced an unrelated bug: `Insert Run` was still using the old comma-joined multi-`{{ }}` query pattern the 2026-07-20 decision log had already banned (the other two Postgres nodes were migrated, this one wasn't) — broke under paired-item resolution at this data volume. Fixed to the single-array-expression form. | Live verification only |
+| Run twice in a row | Exception count identical, `last_seen` updated | **Confirmed.** Also caught and fixed a real regression while testing this: `Upsert Exception`/`Insert Match` had no `queryBatching` baked into `workflow.template.json`, so a fresh canvas re-import silently reverted to n8n's default (`single`, collapsing all items to one query) instead of `independently` — undoing the session-11 fix on every re-import. Now explicit in the template. | Live verification only |
+| Empty day (zero charges) | Posts "nothing to reconcile," does not crash | Confirmed: `formatSlackMessage` on zero payments/zero deals posts a clean headline (`0 payments · 0 clean · 0 exceptions · $0.00 unreconciled`), no crash. | `test/format.test.js` |
+| Deal with no associated contact | Skipped with a warning, doesn't kill the run | Confirmed: a `closedwon` deal with no email (contact join failed upstream) is silently skipped, no exception raised, run continues. | `test/classify.test.js` |
+| Deal amount is null | Skipped with a warning | Confirmed: amount scoring is skipped entirely (not treated as 0), pair still lands in `review` at reduced confidence — visible to a human as a `REVIEW` exception, not silently dropped. | `test/matcher.test.js` |
+| Charge with no email | `PAYMENT_NO_DEAL`, flagged "no email — cannot match" | Confirmed, after a fix: `classify.js` already set an `unmatchable` flag on these, but `format.js` never read it, so the reason never reached Slack. Added the missing check. | `test/classify.test.js`, `test/format.test.js` |
+| Clock skew: charge timestamped in the future | Handled, not silently dropped | Confirmed: a charge timestamped years in the future is still scored and paired normally. | `test/matcher.test.js` |
+| Slack webhook 404 | Run still completes, data still written, failure logged | Confirmed: Postgres and Sheets both write successfully; Slack's own failure routes to `Failure Alert`, not `Mark Run Failed` (the run itself succeeded — only the notification failed), per the session 13 design decision. | Live verification only |
+
+## Known, accepted limitations (not bugs, not fixed)
+
+- **Shared Postgres instance.** n8n's own application database and the
+  recon schema (`runs`/`exceptions`/`matches`) live in the same Postgres
+  container. A full Postgres outage takes n8n's scheduler down with it —
+  there's no way to isolate "the recon DB is down" from "n8n itself is
+  down" without a second Postgres instance, which is out of scope.
+- **Duplicate Slack alerts on cascading upstream failures.** If a fetch
+  node fails AND a downstream node's own error handling also fires (e.g.
+  `Get many charges` fails, then `Normalize` also errors trying to read
+  it), `Failure Alert` posts once per failing node, not once per
+  incident. Cosmetic noise, not a correctness issue.
+- **`subscriptionId` is always `null`.** The native n8n Stripe node's
+  `charge: getAll` operation has no `expand` parameter, so a real
+  subscription ID can't be populated without swapping to a hand-rolled
+  HTTP Request node with manual pagination. Scoped, not built — see
+  `progress.md`'s Next-session notes.
+- **Slack webhook still needs rotating** — was hardcoded locally for a
+  while earlier in the project (never pushed to a public remote), good
+  hygiene to rotate regardless.
+- Non-goals from PLAN.md §1 (no dashboard, no LLM in the matcher, no
+  multi-currency, no GHL adapter) are deliberate scope cuts, not gaps.
