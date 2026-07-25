@@ -1,24 +1,52 @@
 # Progress
 
-**Last updated:** 2026-07-25 by Ahad, session 15 —
-**Phase 6 CLOSED**
-**Current phase:** 7 (not started). Session 15 re-imported the n8n canvas
-clean (single workflow, credentials remapped, no duplicate nodes), then ran
-the full Phase 6 hardening table live against the real Docker/Stripe/HubSpot/
-Slack stack — all 10 break scenarios in PLAN.md's table confirmed, 4 real
-bugs found and fixed along the way (not just latent risks — every one
-reproduced live before being fixed): `queryBatching` never baked into the
-template so re-imports silently reverted to n8n's single-query default;
-`unmatchable` flag set by `classify.js` but never read by `format.js`, so
-"no email — cannot match" never reached Slack; `Normalize` had no error
-branch and crashed the whole execution when an upstream fetch failed instead
-of alerting cleanly; `Insert Run` was the one Postgres node never migrated
-off the banned comma-joined query pattern, invisible until a 250-charge
-pagination stress test exposed it. `docs/LIMITATIONS.md` written (Ahad
-drafted it — file is Murad's per PLAN.md §5 ownership, flagged for his
-review) covering all 10 break-test rows plus known accepted limitations.
-**Phase 6 formally CLOSED — read `docs/LIMITATIONS.md` before starting
-Phase 7.**
+**Last updated:** 2026-07-25 by Murad, session 16 —
+**Phase 7 IN PROGRESS**
+**Current phase:** 7. Session 16 (Murad) wrote `docs/DECISIONS.md` (every
+real project decision and why) and `README.md` (problem-first, 194-word
+intro, exception-type table, architecture, CRM-agnostic pitch), both pushed.
+Then reviewed `docs/LIMITATIONS.md`'s "known, accepted limitations" section
+as his own take rather than just accepting Ahad's session-15 draft — while
+re-reading `src/matcher.js`, `src/classify.js`, and `build/drivers/
+normalize.driver.js` directly to verify it, found a real bug, not just a
+documentation gap: `Normalize`'s deal↔contact join zipped `rawDeals[i]` with
+`rawContacts[i]` by array position, but `Get a contact`'s `onError` is
+`continueErrorOutput` — a single failed contact lookup mid-batch drops that
+item from the success array and shifts every contact after it out of
+alignment with its deal. Reproduced live against the real stack (temporary
+forced-failure test on the live canvas, fully reverted after): with one
+lookup forced to fail, the deal whose lookup failed showed up carrying the
+*next* deal's real customer email instead — confirmed by matching the
+HubSpot contact's own `vid` against the deal's `associations.associatedVids[0]`.
+Fixed by keying the join off `vid` in a lookup map instead of trusting
+position. 60/60 tests still passing (the driver itself isn't in Vitest's
+scope — n8n glue, not `src/*.js`).
+
+Also found the live n8n canvas had drifted hard from what session 15's
+close-out claimed: 6 stale/duplicate workflows sitting on the instance (2
+leftover "My workflow" Phase-0 spikes, 4 old Reconciliation-Bot drafts), none
+matching the workflow ID (`qqLC263AL1oUrIYH`) progress.md recorded, and the
+one that actually was current (`Reconciliation-Bot-Final`, real workflow ID
+`yCRMRkI0w6d1Gy61`) was missing 3 of the 4 bug fixes session 15 said it
+verified live: `queryBatching: independently` absent on both Postgres nodes,
+`Normalize` had no `onError` branch, `Insert Run`'s `queryReplacement` was
+empty (worse than the old bug — no array expression at all). Deleted all 6
+stale workflows, reimported `workflow.json` fresh via the n8n public API
+(twice — once to get a clean baseline before the contact-join fix, once
+after, to deploy it) — confirmed clean each time: single workflow, inactive,
+production cron, no disabled nodes, all fixes present. New live workflow ID
+is `2QTfPZ2vGk2RYpHd`.
+
+Discovered along the way: the n8n public REST API has no manual-execute
+endpoint (only activate/deactivate/retry) — every live test this project has
+ever done, including this session's, has to go through the browser UI's
+"Execute workflow" button, not `curl`. Session 15's write-ups may have
+implied API-driven testing; they weren't — same as this session, done by
+hand in the browser.
+
+**Phase 7 not yet closed.** Ahad's `INSTALL.md` wipe-test (delete everything,
+follow the doc literally on a clean machine) is the one open item. README was
+a "both" task — only Murad's pass exists so far, worth Ahad's eyes on it.
 **Days elapsed:** 9 / 21
 
 ## Phase 0 — 12-check results
@@ -369,6 +397,24 @@ it's always `null` in fixtures, a no-op for the exclusion logic. 3 new tests.
       "LIMITATIONS.md or a test" rule. **Phase 6 CLOSED.**
 - [x] `docs/LIMITATIONS.md` written (session 15, Ahad — flagged for
       Murad's review, it's his file per PLAN.md §5)
+- [x] `docs/DECISIONS.md` written (session 16, Murad) — every real project
+      decision and why, per PLAN.md §Phase 7
+- [x] `README.md` written (session 16, Murad) — 194-word problem-first
+      intro, exception-type table, architecture, CRM-agnostic pitch, doc
+      links, non-goals, stack. Ahad hasn't reviewed yet (README is a "both"
+      task per PLAN.md §Phase 7)
+- [x] `docs/LIMITATIONS.md` reviewed and rewritten by Murad as his own take
+      (session 16) — corrected/expanded the "known, accepted limitations"
+      section, added 4 previously-undocumented gaps (currency-mismatch
+      signal, positional deal/contact join risk, missing backfill path,
+      unicode/IDN email scope)
+- [x] Real bug found and fixed during that review (session 16): `Normalize`'s
+      deal↔contact join was positional, not keyed — reproduced live, fixed
+      by keying on HubSpot contact `vid` instead of array position (see
+      Session 16 log and Decisions log for detail)
+- [x] Live n8n canvas cleaned up (session 16) — 6 stale/duplicate workflows
+      deleted (drifted hard from what session 15 recorded), `workflow.json`
+      reimported fresh, confirmed clean
 
 **Phase 5 in progress (session 9, Murad).** Pulled Ahad's nodes 1-6 export
 (`workflow/workflow.template.json`). Built nodes 7-14 by hand in n8n: `Normalize`,
@@ -508,6 +554,86 @@ not unilaterally — same rule applies here.
 real (not draft).
 
 ## Session log
+### Session 16 — 2026-07-25 (Murad)
+- Wrote `docs/DECISIONS.md` (Phase 7, Murad's piece per PLAN.md §5): every
+  real project decision and the reasoning behind it, organized by
+  architecture / matching rules / infrastructure / data-seeding / process.
+  Pulled from the existing Decisions log and session history rather than
+  invented fresh — cross-checked claims against `src/matcher.js`,
+  `src/classify.js`, and `docs/CONTRACT.md` before writing them down.
+  Committed `9e5c249`.
+- Wrote `README.md` (Phase 7, "both" task — only Murad's pass done so far):
+  problem-first intro trimmed to 194 words, exception-type table,
+  architecture diagram in prose, CRM-agnostic pitch, install pointer, doc
+  links, explicit non-goals section, stack summary. Committed `6fc592b`.
+- Reviewed and rewrote `docs/LIMITATIONS.md`'s "known, accepted
+  limitations" section as his own take rather than rubber-stamping Ahad's
+  session-15 draft, per the file's PLAN.md §5 ownership and the explicit
+  next-session note asking for this. Verified the existing Phase 6
+  break-test table against `matcher.js`/`classify.js` directly (accurate,
+  kept as-is) and re-read `build/drivers/normalize.driver.js` +
+  `workflow.json` while writing the "own take" section — that re-read is
+  what surfaced the deal↔contact join bug below. Also added 3 other
+  previously-undocumented gaps found the same way: currency mismatches
+  produce no distinguishing signal (silently become an ordinary
+  `PAYMENT_NO_DEAL`/`DEAL_NO_PAYMENT`), no `--backfill` path exists for a
+  missed cron night (PLAN.md §7.5 calls this out, was never built), and
+  unicode/IDN email domains (PLAN.md §7.1) were never carried into this
+  file. Committed `880388d`.
+- Found the live n8n instance didn't match what `progress.md` recorded:
+  queried the public API directly (`GET /workflows`) and found 6 workflows,
+  none with the ID (`qqLC263AL1oUrIYH`) session 15 wrote down. The closest
+  real candidate, `Reconciliation-Bot-Final` (`yCRMRkI0w6d1Gy61`, last
+  touched 2026-07-25 — found by checking execution history, which pointed
+  at this ID), was itself missing 3 of the 4 fixes session 15 claimed to
+  have verified live: no `queryBatching` on the two Postgres nodes, no
+  `onError` on `Normalize`, and `Insert Run`'s `queryReplacement` was an
+  empty string (would fail outright, not even the old banned pattern).
+  Confirmed all credential IDs in the committed `workflow.json` still
+  matched the live credential store (`GET /credentials`) — no remap
+  needed. With the user's explicit go-ahead, deleted all 6 stale/duplicate
+  workflows and reimported `workflow.json` fresh via the API — confirmed
+  the 4 fixes present on the new import (id `fSUeN8LlRjMgrbFw`).
+- Investigated the deal↔contact join in `build/drivers/normalize.driver.js`
+  (flagged as an unverified risk in the LIMITATIONS.md review above) by
+  reading `workflow.json`'s `Get a contact` node directly: its `onError`
+  is `continueErrorOutput`, and the driver zipped `rawDeals[i]` with
+  `rawContacts[i]` by array position — meaning one failed contact lookup
+  mid-batch (which drops that item off the success array) shifts every
+  contact after it out of alignment with its deal. Discovered the public
+  n8n API has no manual-execute endpoint (only activate/deactivate/retry),
+  so live reproduction had to go through the browser UI — walked the user
+  through it directly since the UI requires the human-owned n8n login
+  (not something in `.env`, per PLAN.md §9's "Claude Code cannot click
+  OAuth/login screens" rule): checked `Filter1` (28 deals, `Filter`
+  (payments) empty so no window-widening needed since this test only
+  touches deals/contacts), disabled `Insert Run`/`Upsert Exception`/
+  `Insert Match`/`Append row in sheet`/`Slack` so the test run had zero
+  real side effects, temporarily edited `Get a contact`'s contact-ID
+  expression to force item 0's lookup to fail on purpose, ran the
+  workflow once. Confirmed via the execution data (pulled through the API
+  after the UI run) that the theory was exactly right: deal 0 (whose real
+  lookup failed) showed up in `Normalize`'s output carrying
+  `john.smith@ironhidefitness.com` — deal 1's real customer, confirmed by
+  matching that contact's own `vid` (`523984001764`) against deal 1's
+  `associations.associatedVids[0]` (same number, exact match).
+- Fixed it: `normalize.driver.js` now builds a `Map` keyed on each
+  contact's own `vid`, and looks up each deal's contact via
+  `deal.associations.associatedVids[0]` against that map — survives any
+  subset or order of successful lookups, not just the happy path. Ran
+  `npm test` (60/60, unaffected — the driver isn't in Vitest's scope) and
+  `npm run build` to regenerate `workflow.json`. Deleted the test-modified
+  workflow (`fSUeN8LlRjMgrbFw`) and reimported the fixed file fresh (new
+  id `2QTfPZ2vGk2RYpHd`) — verified via the API that the live canvas came
+  back fully clean: `Get a contact`'s expression back to original, all 5
+  temporarily-disabled nodes enabled again, the fix present in
+  `Normalize`'s code, no leftover test state anywhere. Rewrote the
+  LIMITATIONS.md row for this from "unverified risk" to confirmed-and-
+  fixed. Committed `19260f3`.
+- 4 commits this session (`9e5c249`, `6fc592b`, `880388d`, `19260f3`), all
+  pushed, all verified clean under `git log -1 --format='%an <%ae>%n%B'`
+  per CLAUDE.md's git rules.
+
 ### Session 15 — 2026-07-25 (Ahad)
 - Re-imported the n8n canvas clean: deleted the stale workflow, rebuilt
   `workflow.json`, remapped all 8 credential refs to this instance's live
@@ -1233,16 +1359,24 @@ real (not draft).
 | **Slack webhook still needs rotating** | Murad/Ahad | session 9 | Was hardcoded locally in `workflow.json`/`workflow.template.json` for a while (never pushed, since fixed to use `{{ $env.SLACK_WEBHOOK_URL }}`) — good hygiene to rotate it regardless. Not yet done. |
 | ~~`workflow.json` needed a full canvas delete + clean re-import, `queryBatching` reset behavior on reimport uncharacterized~~ | Ahad | session 13, resolved session 15 | **RESOLVED.** Re-imported clean via the n8n API. Confirmed the real answer to the open question: `queryBatching` is NOT preserved on reimport if it isn't explicitly in the node's `parameters.options` — it silently falls back to n8n's default (`single`), which is wrong for these two nodes. Fixed by baking `"queryBatching": "independently"` into `workflow.template.json` itself, so it's no longer a live-canvas-only setting that reimport can silently lose. |
 | **`Normalize`→`Failure Alert` and a failing fetch node's own `Failure Alert` can both fire for one root cause** | — | session 15 | Cosmetic double-alert on cascading upstream failures, not a correctness bug. Logged in `docs/LIMITATIONS.md`, not fixed. Would need either a single choke-point/guard node before `Normalize`, or deduping in `Failure Alert` itself — a real design decision, left for whoever picks this up. |
+| ~~Live n8n canvas didn't match what session 15 recorded — wrong workflow ID, 6 stale/duplicate workflows, 3 of 4 session-15 bug fixes missing from the actual live node~~ | Murad | session 16, found and resolved same session | **RESOLVED.** `progress.md` recorded workflow id `qqLC263AL1oUrIYH`; the live instance had no such workflow — 6 others instead (`yCRMRkI0w6d1Gy61` "Reconciliation-Bot-Final" was the real current one, last touched 2026-07-25, but missing `queryBatching`, `Normalize`'s `onError`, and `Insert Run`'s `queryReplacement` — all three regressed back to broken despite session 15 claiming they were fixed and verified live). Deleted all 6 stale workflows, reimported `workflow.json` fresh via the n8n public API. Root cause of the drift itself wasn't determined (could be a different Docker volume, a container recreate, or the session-15 verification never actually round-tripped through a save) — flagged for awareness, not chased further since the fix (clean reimport) is the same regardless of cause. |
+| ~~`Normalize`'s deal↔contact join was positional (`rawDeals[i]`/`rawContacts[i]`), not keyed~~ | Murad | session 16, found and resolved same session | **RESOLVED.** Reproduced live: with one contact lookup forced to fail mid-batch, the deal whose lookup failed showed the *next* deal's real customer email instead of nothing. Fixed by keying the join on HubSpot contact `vid` against `deal.associations.associatedVids[0]` in a lookup map. See Decisions log. |
 
 ## Next session — start here
-**Phase 6 is CLOSED — read `docs/LIMITATIONS.md` for the full break-test
-results before starting anything. Pick up Phase 7 next, per PLAN.md
-(`INSTALL.md`/`DECISIONS.md`/`LIMITATIONS.md`/README, split Ahad/Murad/both
-per §5).** Note: this session drafted `docs/LIMITATIONS.md` out of
-necessity (Phase 6's own exit rule required it), even though it's Murad's
-file per the ownership split — **Murad should review/rewrite it as his
-own**, not just accept Ahad's draft as final, especially the "known,
-accepted limitations" section which is meant to be his honest take.
+**Phase 7 is IN PROGRESS, not closed.** Murad's two docs pieces
+(`DECISIONS.md`, `LIMITATIONS.md`) are done and pushed. Ahad's piece is not:
+
+1. **`docs/INSTALL.md` wipe-test.** Doc itself has been accurate since
+   session 14 — actually never verified by wiping everything and following
+   it literally on a clean machine, which is the whole point (PLAN.md
+   §Phase 7: "if a step is missing you'll find it here, not when a client
+   does"). This is the one thing blocking Phase 7 from closing.
+2. **README review.** Written by Murad this session (session 16) — it's a
+   "both" task per PLAN.md §5. Worth Ahad reading it before Phase 7 closes,
+   even if no changes come out of it.
+3. Once both of the above are done, flip to Phase 8 (screen capture,
+   LinkedIn post, Upwork portfolio entry, repo public) — hard 21-day cap,
+   don't start Phase 8 work early.
 
 Housekeeping carried forward, not blocking Phase 7:
 1. Rotate the Slack webhook (good hygiene — was hardcoded locally for a
@@ -1256,15 +1390,22 @@ Housekeeping carried forward, not blocking Phase 7:
 3. Double `Failure Alert` on cascading upstream failures (see Blockers row
    above) — cosmetic, not blocking, real design decision if fixed.
 4. The exception-count noise from accumulated old Stripe test batches
-   (including this session's 250-charge pagination test — all refunded,
-   but never deletable, so they'll still show up in raw counts until they
-   age out of the window) will keep showing up on manual same-day test
-   runs for a while — expected, not a bug. Real production nightly runs
-   (2am cron) are unaffected since they only see truly-yesterday data.
-5. The live n8n canvas is currently workflow id `qqLC263AL1oUrIYH`
-   (created session 15's re-import), inactive, production cron
-   (`0 0 2 * * *`), all 4 real credentials bound, no test/temp credentials
-   left over — confirmed clean at session close.
+   (including session 15's 250-charge pagination test — all refunded, but
+   never deletable, so they'll still show up in raw counts until they age
+   out of the window) will keep showing up on manual same-day test runs for
+   a while — expected, not a bug. Real production nightly runs (2am cron)
+   are unaffected since they only see truly-yesterday data.
+5. `normalize.driver.js`'s deal-contact join fix (session 16) has no
+   dedicated automated test — it's n8n glue outside `src/*.js`'s Vitest
+   scope. Worth a test fixture if this logic ever moves into `src/` proper,
+   or a lightweight standalone test for `build/drivers/` files generally.
+6. The live n8n canvas is currently workflow id `2QTfPZ2vGk2RYpHd` (created
+   session 16's re-import, after the contact-join fix), inactive, production
+   cron (`0 0 2 * * *`), all 4 real credentials bound, no test/temp
+   credentials or disabled nodes left over — confirmed clean at session
+   close. **If this ID doesn't match reality next session, don't trust this
+   line blindly — check the live instance directly first, same as this
+   session had to.**
 
 ## Ideas parked (NOT doing, do not start)
 - Web dashboard — README extensions only
@@ -1301,3 +1442,6 @@ Housekeeping carried forward, not blocking Phase 7:
 | 2026-07-25 | Phase 6's live-infra break scenarios (Postgres kill, Stripe key revoke, Slack 404, 250-charge pagination) tested against temporary/throwaway credentials and config, never the real shared Stripe key or Slack webhook | The real Stripe key and Slack webhook are shared with Murad — revoking or breaking them for a test would've broken his setup too. Used a deliberately-invalid temporary Stripe credential (created and deleted via the n8n API) and a temporarily-repointed Slack URL instead, both fully reverted after each test. Same real failure mode gets exercised either way (an auth/URL failure is an auth/URL failure to the node), without the blast radius. |
 | 2026-07-25 | "Kill Postgres mid-run" tested via a simulated bad-table-name query, not by actually stopping the Postgres container | n8n's own application database and the recon schema share one Postgres instance/container (`docker-compose.yml`'s single `postgres` service backs both `DB_POSTGRESDB_*` and the recon credential). Stopping the container takes n8n's own scheduler/API down with it, so there's no way to isolate "the recon DB is unreachable" from "n8n itself is down" — confirmed live (workflow API returned `503 Database is not ready!` the moment Postgres stopped). Logged as a real, accepted architectural limitation in `docs/LIMITATIONS.md` rather than treated as a test failure. |
 | 2026-07-25 | `docs/LIMITATIONS.md` drafted by Ahad this session, despite being Murad's file per PLAN.md §5 | Phase 6's own exit rule ("every scenario gets a row in LIMITATIONS.md or a test") required the file to exist before Phase 6 could close, and closing Phase 6 was this session's task. Explicitly flagged in Next-session notes for Murad to review and rewrite as his own rather than silently treat Ahad's draft as final — matches CLAUDE.md's "say so, don't silently deviate" spirit for crossing an ownership line out of necessity. |
+| 2026-07-25 | `Normalize`'s deal↔contact join keyed on HubSpot contact `vid` instead of array position | Positional zip (`rawDeals[i]`/`rawContacts[i]`) silently misattributes a deal's customer info to a different deal whenever `Get a contact`'s `onError: continueErrorOutput` drops one failed lookup out of the success array mid-batch — reproduced live, not just theorized. Every deal already carries its real contact's ID (`associations.associatedVids[0]`), and every contact response carries its own `vid` — keying a lookup `Map` on that survives any subset/order of successful fetches, unlike position. |
+| 2026-07-25 | Deleted all 6 stale/duplicate workflows from the live n8n instance rather than trying to identify and keep one | None of the 6 matched the workflow ID `progress.md` had recorded, and the closest candidate (`Reconciliation-Bot-Final`) was itself stale against the committed `workflow.json` — cheaper and safer to reimport a known-clean file than to reconcile or patch a canvas that had already drifted in an undiagnosed way. Consistent with the existing "always delete before reimport" rule (2026-07-20), just applied to a messier starting state than usual. |
+| 2026-07-25 | Live testing this session went through the browser UI (Claude in Chrome), not the n8n REST API | Discovered the public API has no manual-execute endpoint (only `activate`/`deactivate`/retry-existing) — a genuine platform constraint, not a workaround avoided out of laziness. Every prior session's "live" verification claims in this file almost certainly went through the UI the same way; noting it here so nobody assumes `curl` can drive a one-off test run in future sessions. |
