@@ -66,6 +66,13 @@ describe('formatSlackMessage', () => {
     expect(message.blocks[0].text.text).toContain('1 payments · 1 clean · 0 exceptions · $0.00 unreconciled');
   });
 
+  it('empty day — zero charges in, does not crash, still posts a headline', () => {
+    const message = formatSlackMessage(emptyMatch, [], {});
+
+    expect(message.blocks).toHaveLength(1);
+    expect(message.blocks[0].text.text).toContain('0 payments · 0 clean · 0 exceptions · $0.00 unreconciled');
+  });
+
   it('orders DUPLICATE_CHARGE and PAYMENT_NO_DEAL before REVIEW', () => {
     const review = { type: 'REVIEW', payment: payment({ id: 'ch_review' }), deal: deal({}), confidence: 70 };
     const dup = { type: 'DUPLICATE_CHARGE', payment: payment({ id: 'ch_dup' }), duplicateOf: payment({ id: 'ch_win' }) };
