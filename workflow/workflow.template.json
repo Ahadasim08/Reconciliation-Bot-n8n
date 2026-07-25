@@ -504,7 +504,8 @@
         48
       ],
       "id": "12f257c2-4512-49d6-8cd6-c8ced19720e0",
-      "name": "Normalize"
+      "name": "Normalize",
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -858,6 +859,13 @@
         [
           {
             "node": "Match",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failure Alert",
             "type": "main",
             "index": 0
           }
