@@ -1,8 +1,23 @@
 # Progress
 
-**Last updated:** 2026-07-28 by Murad, session 18 —
-**Phase 7 IN PROGRESS**
-**Current phase:** 7. Session 18 (Murad) finished the `docs/INSTALL.md`
+**Last updated:** 2026-07-28 by Ahad, session 19 —
+**Phase 7 CLOSED, Phase 8 IN PROGRESS**
+**Current phase:** 8. Session 19 (Ahad) reviewed Murad's session-18
+`docs/INSTALL.md` wipe-test completion and the healthcheck fix (both clean,
+see session 19 log), then did the last open Phase 7 item: read `README.md`
+end to end and cross-checked its factual claims against the actual code
+(`src/matcher.js`'s `autoMatchThreshold`/`reviewThreshold` for the "60-84%"
+REVIEW claim, `LIMITATIONS.md` for the USD/currency framing, `INSTALL.md`
+for the 4-credentials claim) rather than just reading it for tone. Every
+claim checked out — no rewrite needed. Signed off. **Phase 7 formally
+CLOSED** (both `DECISIONS.md`/`LIMITATIONS.md`/`INSTALL.md`
+wipe-test/README review — everything PLAN.md §Phase 7 asked for — is now
+done and reviewed by both people). Flipping to **Phase 8** (screen capture,
+LinkedIn post, Upwork portfolio entry, repo public) per PLAN.md's 21-day
+cap — no Phase 8 work started yet this session, next session starts there.
+
+### Session 18 — 2026-07-28 (Murad)
+Session 18 (Murad) finished the `docs/INSTALL.md`
 wipe-test session 17 (Ahad) left half done — same isolated pattern (fresh
 `git clone` into a scratch dir, `docker compose -p install-wipe-test up -d`,
 own named volumes, real prod containers confirmed stopped/untouched
@@ -88,7 +103,7 @@ hand in the browser.
 **Phase 7 not yet closed.** Ahad's `INSTALL.md` wipe-test (delete everything,
 follow the doc literally on a clean machine) is the one open item. README was
 a "both" task — only Murad's pass exists so far, worth Ahad's eyes on it.
-**Days elapsed:** 9 / 21
+**Days elapsed:** 12 / 21
 
 ## Phase 0 — 12-check results
 Ahad ran the upstream checks 2026-07-17 (Stripe test mode, HubSpot free tier private
@@ -473,6 +488,11 @@ it's always `null` in fixtures, a no-op for the exclusion logic. 3 new tests.
       torn down cleanly. All 8 install steps now verified across sessions
       17+18. `docker-compose.yml`'s n8n healthcheck (`687236c`) confirmed
       working live — `docker inspect` reports `healthy`, not just `Up`.
+- [x] `README.md` reviewed and signed off (session 19, Ahad) — cross-checked
+      every factual claim against real code/docs (REVIEW 60-84% confidence
+      range vs `src/matcher.js`'s thresholds, USD/currency framing vs
+      `LIMITATIONS.md`, 4-credentials claim vs `INSTALL.md`), all accurate,
+      no changes needed. **Phase 7 CLOSED.**
 
 **Phase 5 in progress (session 9, Murad).** Pulled Ahad's nodes 1-6 export
 (`workflow/workflow.template.json`). Built nodes 7-14 by hand in n8n: `Normalize`,
@@ -612,6 +632,33 @@ not unilaterally — same rule applies here.
 real (not draft).
 
 ## Session log
+### Session 19 — 2026-07-28 (Ahad)
+- Reviewed Murad's two pushed session-18 commits before doing anything else:
+  `687236c` (n8n `healthcheck` added to `docker-compose.yml`, `wget /healthz`,
+  5s interval, 10 retries) and `2853659` (session 18 close-out — INSTALL.md
+  wipe-test steps 4/5/7/8 finished for real, one missed HubSpot credential
+  rebind patched via API). Diff was clean — only `docker-compose.yml` and
+  `progress.md` touched, no `src/*.js` or `workflow.json` changes, nothing
+  destructive, real secrets confirmed not left on disk. No issues found.
+- Did the one remaining Phase 7 item: read `README.md` in full and verified
+  its factual claims against the actual code/docs instead of just proofreading
+  tone — `REVIEW`'s "60-84% confidence" claim against `src/matcher.js`'s
+  `autoMatchThreshold: 85`/`reviewThreshold: 60` (exact match, `84` is the top
+  of review's range since `85` is the auto-match cutoff), the USD/currency
+  framing against `docs/LIMITATIONS.md`'s currency-mismatch section, the
+  "four credentials" claim against `docs/INSTALL.md` step 4. Every claim
+  checked out. One soft, non-blocking note: the "under 30 minutes" setup
+  claim isn't timed anywhere in `INSTALL.md` or any session log — plausible
+  given session 18 ran the full install end to end, but nobody actually
+  clocked it. Not worth blocking sign-off on.
+- Signed off on `README.md`. **Phase 7 formally CLOSED** — every item PLAN.md
+  §Phase 7 asked for (`DECISIONS.md`, `LIMITATIONS.md` review, `INSTALL.md`
+  wipe-test, README review) is done and reviewed by both people.
+- Flipped `progress.md`'s Current phase to **Phase 8** (PLAN.md's "Ship":
+  60-second screen capture, LinkedIn post, Upwork portfolio entry). No Phase 8
+  work started this session — per CLAUDE.md's one-phase-per-session rule,
+  next session starts there fresh.
+
 ### Session 18 — 2026-07-28 (Murad)
 - Picked up where session 17 left off: finish the `docs/INSTALL.md`
   wipe-test (steps 4/5/7/8). Reused the same isolated-instance pattern —
@@ -1511,18 +1558,20 @@ real (not draft).
 | ~~`docker-compose.yml`'s "wait for healthy" doc claim is inaccurate for `n8n`~~ | Murad or Ahad | session 17, resolved (fix landed `687236c` before session 18) | **RESOLVED.** `n8n` service now has a `healthcheck` (`wget ... /healthz`). Confirmed working live session 18 — `docker inspect` reported `healthy`, matching the doc's claim. |
 
 ## Next session — start here
-**Phase 7 is IN PROGRESS, not closed.** Murad's two docs pieces
-(`DECISIONS.md`, `LIMITATIONS.md`) are done and pushed. `docs/INSTALL.md`'s
-wipe-test is now **fully done** (sessions 17+18, all 8 steps verified live)
-and the healthcheck doc fix already landed. One item left before Phase 7 can
-close:
+**Phase 7 is CLOSED. Phase 8 (PLAN.md §Phase 8, "Ship", both people) starts
+next session** — nothing built yet, session 19 was review-only. Per PLAN.md:
 
-1. **README review (Ahad).** Written by Murad session 16 — it's a "both"
-   task per PLAN.md §5. Worth reading before Phase 7 closes, even if no
-   changes come out of it.
-2. Once 1 is done, flip to Phase 8 (screen capture, LinkedIn post, Upwork
-   portfolio entry, repo public) — hard 21-day cap, don't start Phase 8 work
-   early.
+1. **60-second screen capture**: seed → run → Slack alert → click into
+   Sheet → click through to the real Stripe charge. The portfolio piece —
+   repo proves it's real, video is what people actually watch. Needs a live
+   run against real (or freshly seeded) data, so plan for one seed cycle
+   right before recording.
+2. **LinkedIn post.** PLAN.md's suggested lead: *"Your CRM says you closed
+   $50k last month. Your Stripe says $47k. Nobody knows where the $3k went —
+   because nobody's looking."* (README's intro already uses this framing,
+   so the post can lift straight from it.)
+3. **Upwork portfolio entry**, linking repo + video.
+4. Hard 21-day cap (day 12 of 21 as of session 19) — no reason to stall here.
 
 Housekeeping carried forward, not blocking Phase 7:
 1. Rotate the Slack webhook (good hygiene — was hardcoded locally for a
@@ -1595,3 +1644,4 @@ Housekeeping carried forward, not blocking Phase 7:
 | 2026-07-25 | Live testing this session went through the browser UI (Claude in Chrome), not the n8n REST API | Discovered the public API has no manual-execute endpoint (only `activate`/`deactivate`/retry-existing) — a genuine platform constraint, not a workaround avoided out of laziness. Every prior session's "live" verification claims in this file almost certainly went through the UI the same way; noting it here so nobody assumes `curl` can drive a one-off test run in future sessions. |
 | 2026-07-28 | Patched one node's stale credential binding via a direct API `PUT` instead of sending the user back into the n8n UI | Only one node (`Get a contact`) out of eight credentialed nodes was missed in the manual re-selection pass — a single-field JSON patch on the workflow's `credentials` object is lower-risk and faster than a second UI round-trip, and doesn't change what's being tested (the doc's step-6 claim is about the import behavior itself, already reproduced correctly on the other seven nodes). |
 | 2026-07-28 | Ran `teardown.py` + `seed.py` + `teardown.py` again against the real shared Stripe/HubSpot test accounts to finish the wipe-test's step 8, rather than skipping the seeder | Same real test sandbox used by the live project — leftover tagged data from an earlier session was already present, confirming the known "Stripe charges never delete" constraint still holds. Asked the user before running teardown (destructive/refunding real data) rather than assuming; ran the full clean-seed-clean cycle so the doc's own "run teardown.py afterward" instruction was actually followed, leaving the shared accounts in the same state they'd be in for anyone else's next session. |
+| 2026-07-28 | Closed Phase 7 by cross-checking `README.md`'s factual claims against real code/docs (thresholds, currency framing, credential count) instead of just proofreading for tone | A "both review" task per PLAN.md §5 is worth more than a second pass for wording — README is the first thing a stranger (or an Upwork client) reads, and a marketing doc that overclaims what the matcher actually does would be a worse failure mode than a typo. All claims checked out, no rewrite needed, but the check was real, not rubber-stamped. |
