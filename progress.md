@@ -1,39 +1,46 @@
 # Progress
 
-**Last updated:** 2026-07-25 by Ahad, session 17 —
+**Last updated:** 2026-07-28 by Murad, session 18 —
 **Phase 7 IN PROGRESS**
-**Current phase:** 7. Session 17 (Ahad) wipe-tested `docs/INSTALL.md` steps
-1-3 and 6 against a real isolated clean-machine simulation: fresh `git clone`
-into a scratch directory, brought up as a separate docker compose project
-(`-p install-wipe-test`, port 5679 to not collide with the live instance on
-5678, own named volumes) — not a wipe of the real shared stack, to avoid
-destroying Ahad's real stored credentials (session 9's data-loss precedent).
-Confirmed live: `docker compose up -d` brings both containers up and n8n is
-reachable (step 2); the schema load command works and is genuinely
-idempotent, re-running it a second time only emits `NOTICE: ... already
-exists, skipping` with no errors (step 3); importing `workflow/workflow.json`
-via the n8n REST API carries stale credential IDs from the source instance
-into a completely empty credential store (`GET /rest/credentials` → `{"data":
-[]}`), so step 6's claim that credential bindings don't survive an import and
-must be re-selected is real, not just cautious wording. One real (minor) doc
-inaccuracy found: step 2 says "wait for both containers to report healthy,"
-but `docker-compose.yml` only defines a `healthcheck` on the `postgres`
-service — `n8n` has none, so `docker compose ps` can never show n8n as
-"healthy," only "Up." Not fixed yet — small `docker-compose.yml` change,
-Murad's or Ahad's call.
+**Current phase:** 7. Session 18 (Murad) finished the `docs/INSTALL.md`
+wipe-test session 17 (Ahad) left half done — same isolated pattern (fresh
+`git clone` into a scratch dir, `docker compose -p install-wipe-test up -d`,
+own named volumes, real prod containers confirmed stopped/untouched
+throughout). Confirmed the healthcheck fix already on `main`
+(`687236c`, prior to this session) actually works live: `docker inspect`
+showed `n8n` reporting `healthy`, not just `Up` — step 2's doc inaccuracy
+flagged in session 17 is resolved.
 
-Steps 4/5/7/8 (Stripe/HubSpot/Google/Slack credential creation, activate-and-
-test, seeder) were **not run** this session — they need real accounts and
-manual UI entry (paste a Stripe test key, sign in to Google, etc.), which
-isn't something to script or fake through an API. Isolated stack was torn
-down (`docker compose down -v`) and the scratch clone deleted after
-verification; confirmed the real production containers
-(`reconciliation-bot-n8n-n8n-1`/`-postgres-1`) were untouched throughout and
-still running on 5678 afterward.
+Steps 4/5/7/8 completed for real this session: created an n8n owner account
+and API key (user did this in the browser), added all 4 real credentials
+(Stripe test key, HubSpot private-app token, Google Sheets OAuth2, Postgres)
+via the n8n UI, imported `workflow/workflow.json` via the REST API (24
+nodes) — confirmed the credential store was empty beforehand and every
+credentialed node carried stale IDs from the source instance after import,
+same behavior session 17 found. One node (`Get a contact`) got missed during
+manual re-selection — its HubSpot credential still pointed at a stale ID
+after the user re-bound the other three HubSpot/Stripe/Postgres/Sheets
+nodes; patched via a targeted API `PUT` rather than making the user redo the
+whole UI pass. Step 7: manual **Execute Workflow** ran clean (no red nodes,
+confirmed via screenshot), toggled **Active** via the API, then broke the
+Stripe credential on purpose and re-ran — confirmed the failure routed
+straight to `Failure Alert` (Slack got the alert) and correctly did **not**
+insert a new `runs` row, since `Get many charges` fails before `Insert Run`
+ever runs — matches the documented design from an earlier session, not a
+gap. Credential reverted after. Step 8: found leftover tagged seed data from
+an earlier session's batch in the same real Stripe/HubSpot test accounts,
+ran `teardown.py` first (45 deals/contacts deleted, unrefunded charges
+refunded), then `seed.py` clean (36 clean/4 exceptions/6 hostile/1 declined,
+`expected.json` written), then `teardown.py` again per the doc's own
+instruction to clean up afterward. Isolated stack torn down
+(`docker compose -p install-wipe-test down -v`), scratch clone (which held
+real secrets in a throwaway `.env`) deleted.
 
-**Phase 7 INSTALL.md wipe-test is therefore partially done, not closed.**
-Handing the credential-dependent half (steps 4/5/7/8) to Murad — see Next
-session below.
+**`docs/INSTALL.md` wipe-test is now fully verified, all 8 steps, across
+sessions 17+18.** No new bugs found this session beyond what session 17
+already documented (stale-credential-on-import is expected/doc-accurate
+behavior, not a bug). Phase 7 still not closed — Ahad's README review
+(session 16, Murad wrote it) is the one remaining item, see Next session.
 
 ### Session 16 — 2026-07-25 (Murad)
 Session 16 (Murad) wrote `docs/DECISIONS.md` (every
@@ -456,6 +463,16 @@ it's always `null` in fixtures, a no-op for the exclusion logic. 3 new tests.
       claim for n8n — no healthcheck defined on that service). Steps
       4/5/7/8 (real Stripe/HubSpot/Google/Slack credentials, activate,
       seeder) not run — needs Murad, see Next session.
+- [x] **`docs/INSTALL.md` wipe-test fully completed (session 18, Murad)** —
+      steps 4/5/7/8 run for real against real Stripe/HubSpot/Google/Slack
+      test accounts on a fresh isolated instance: all 4 credentials added,
+      workflow imported and confirmed to lose credential bindings (one
+      missed HubSpot rebind on `Get a contact` found and patched), manual
+      execute clean, activated, error-branch (`Failure Alert`) confirmed
+      live with a deliberately broken Stripe credential, seeder run and
+      torn down cleanly. All 8 install steps now verified across sessions
+      17+18. `docker-compose.yml`'s n8n healthcheck (`687236c`) confirmed
+      working live — `docker inspect` reports `healthy`, not just `Up`.
 
 **Phase 5 in progress (session 9, Murad).** Pulled Ahad's nodes 1-6 export
 (`workflow/workflow.template.json`). Built nodes 7-14 by hand in n8n: `Normalize`,
@@ -595,6 +612,55 @@ not unilaterally — same rule applies here.
 real (not draft).
 
 ## Session log
+### Session 18 — 2026-07-28 (Murad)
+- Picked up where session 17 left off: finish the `docs/INSTALL.md`
+  wipe-test (steps 4/5/7/8). Reused the same isolated-instance pattern —
+  fresh `git clone` into a scratch dir, `docker compose -p install-wipe-test
+  up -d`, confirmed real prod containers (`reconciliation-bot-n8n-*`) were
+  stopped/untouched the whole time.
+- Confirmed the `687236c` healthcheck fix (already on `main` before this
+  session started) works live: `docker inspect` showed `n8n` reach
+  `healthy`, not just `Up` — closes session 17's doc-inaccuracy finding for
+  real, not just in code.
+- Step 3 (schema load) re-verified quick on the fresh volume, same
+  idempotent behavior as session 17.
+- Step 4/5: user created an n8n owner account and API key in the browser,
+  added all 4 real credentials (Stripe, HubSpot, Google Sheets, Postgres) via
+  the UI. Imported `workflow/workflow.json` via the REST API (24 nodes) —
+  confirmed `GET /api/v1/credentials` was empty beforehand and every
+  credentialed node still carried the source instance's stale credential IDs
+  right after import, matching session 17's finding exactly.
+- Found one credential the user's manual re-selection pass missed:
+  `Get a contact`'s HubSpot credential was still bound to the stale ID after
+  the other three nodes (Stripe/HubSpot on `Get many deals`/Postgres/Sheets)
+  were correctly re-pointed. Rather than send the user back into the UI for
+  one node, patched it directly via a targeted `PUT` on the workflow's
+  `credentials` field — confirmed the new binding took by re-fetching the
+  workflow afterward.
+- Step 7: **Execute Workflow** ran clean (screenshot showed every node green,
+  no error badges, correct row counts through the graph). Toggled **Active**
+  via `POST /api/v1/workflows/{id}/activate`. Broke the Stripe credential on
+  purpose (user edited it in the UI), re-ran, confirmed the failure routed
+  straight to `Failure Alert` (user confirmed Slack got the alert) and — as
+  expected per an earlier session's documented design — did **not** insert a
+  new `runs` row, since `Get many charges` fails before `Insert Run` is ever
+  reached. Credential reverted after.
+- Step 8: `seed.py` initially refused — found leftover tagged data
+  (`seed:batch-1784796122`) from an earlier session still in the same real
+  Stripe/HubSpot test accounts (expected; same known Stripe-charges-never-
+  delete constraint as always). Ran `teardown.py` first (45 deals/contacts
+  deleted, unrefunded charges refunded), then `seed.py` clean
+  (`seed:batch-1785222137` — 36 clean/4 exceptions/6 hostile/1 declined,
+  `expected.json` written), then `teardown.py` again per the doc's own "run
+  afterward" instruction, leaving the real accounts clean.
+- Tore down the isolated stack (`docker compose -p install-wipe-test down
+  -v`) and deleted the scratch clone, which held real Stripe/HubSpot secrets
+  in a throwaway `.env` — nothing sensitive left on disk.
+- **`docs/INSTALL.md` wipe-test is now fully verified across all 8 steps**
+  (sessions 17+18 combined). No new doc/code bugs found this session beyond
+  what session 17 already flagged — the stale-credential-on-import behavior
+  is doc-accurate, not a gap.
+
 ### Session 17 — 2026-07-25 (Ahad)
 - Picked up the Phase 7 blocker: wipe-test `docs/INSTALL.md` on a clean
   machine. Chose an isolated separate docker compose project over actually
@@ -1441,29 +1507,20 @@ real (not draft).
 | **`Normalize`→`Failure Alert` and a failing fetch node's own `Failure Alert` can both fire for one root cause** | — | session 15 | Cosmetic double-alert on cascading upstream failures, not a correctness bug. Logged in `docs/LIMITATIONS.md`, not fixed. Would need either a single choke-point/guard node before `Normalize`, or deduping in `Failure Alert` itself — a real design decision, left for whoever picks this up. |
 | ~~Live n8n canvas didn't match what session 15 recorded — wrong workflow ID, 6 stale/duplicate workflows, 3 of 4 session-15 bug fixes missing from the actual live node~~ | Murad | session 16, found and resolved same session | **RESOLVED.** `progress.md` recorded workflow id `qqLC263AL1oUrIYH`; the live instance had no such workflow — 6 others instead (`yCRMRkI0w6d1Gy61` "Reconciliation-Bot-Final" was the real current one, last touched 2026-07-25, but missing `queryBatching`, `Normalize`'s `onError`, and `Insert Run`'s `queryReplacement` — all three regressed back to broken despite session 15 claiming they were fixed and verified live). Deleted all 6 stale workflows, reimported `workflow.json` fresh via the n8n public API. Root cause of the drift itself wasn't determined (could be a different Docker volume, a container recreate, or the session-15 verification never actually round-tripped through a save) — flagged for awareness, not chased further since the fix (clean reimport) is the same regardless of cause. |
 | ~~`Normalize`'s deal↔contact join was positional (`rawDeals[i]`/`rawContacts[i]`), not keyed~~ | Murad | session 16, found and resolved same session | **RESOLVED.** Reproduced live: with one contact lookup forced to fail mid-batch, the deal whose lookup failed showed the *next* deal's real customer email instead of nothing. Fixed by keying the join on HubSpot contact `vid` against `deal.associations.associatedVids[0]` in a lookup map. See Decisions log. |
-| **`docs/INSTALL.md` wipe-test only half done** | Murad | session 17 | Ahad verified steps 1-3/6 live in an isolated docker compose project (see session 17 log) — schema load, idempotency, and credential-rebinding-required-on-import all confirmed accurate. Steps 4/5/7/8 need real Stripe/HubSpot/Google/Slack accounts and manual n8n UI entry — not scriptable without real secrets, handed to Murad. |
-| **`docker-compose.yml`'s "wait for healthy" doc claim is inaccurate for `n8n`** | Murad or Ahad | session 17 | `docs/INSTALL.md` step 2 says wait for both containers to report healthy, but only the `postgres` service has a `healthcheck` defined — `n8n` can only ever show `Up` in `docker compose ps`, never `healthy`. Small fix: either add a healthcheck to the `n8n` service, or reword the doc. Not done this session. |
+| ~~`docs/INSTALL.md` wipe-test only half done~~ | Murad | session 17, resolved session 18 | **RESOLVED.** Session 18 ran steps 4/5/7/8 for real on a fresh isolated instance (real Stripe/HubSpot/Google/Slack test creds, execute, activate, error-branch test, seeder) — see session 18 log. All 8 install steps now verified. |
+| ~~`docker-compose.yml`'s "wait for healthy" doc claim is inaccurate for `n8n`~~ | Murad or Ahad | session 17, resolved (fix landed `687236c` before session 18) | **RESOLVED.** `n8n` service now has a `healthcheck` (`wget ... /healthz`). Confirmed working live session 18 — `docker inspect` reported `healthy`, matching the doc's claim. |
 
 ## Next session — start here
 **Phase 7 is IN PROGRESS, not closed.** Murad's two docs pieces
-(`DECISIONS.md`, `LIMITATIONS.md`) are done and pushed. Ahad's `INSTALL.md`
-wipe-test is half done (session 17) — steps 1-3/6 verified live and correct,
-steps 4/5/7/8 still need a real run:
+(`DECISIONS.md`, `LIMITATIONS.md`) are done and pushed. `docs/INSTALL.md`'s
+wipe-test is now **fully done** (sessions 17+18, all 8 steps verified live)
+and the healthcheck doc fix already landed. One item left before Phase 7 can
+close:
 
-1. **Finish the `docs/INSTALL.md` wipe-test (Murad).** Spin up another
-   isolated instance (same pattern as session 17 — separate docker compose
-   project/port, don't touch the real shared stack) and walk through steps
-   4/5/7/8 literally: create real Stripe test-mode key, HubSpot private-app
-   token, Slack incoming webhook, Google service-account JSON; store all 4 in
-   n8n; execute once manually; toggle Active; optionally run the seeder. Flag
-   anything the doc gets wrong.
-2. **Small doc/infra fix (either):** `docker-compose.yml`'s `n8n` service has
-   no `healthcheck`, so step 2's "wait for both containers to report healthy"
-   never literally happens for n8n — add one or reword the doc.
-3. **README review (Ahad).** Written by Murad session 16 — it's a "both"
+1. **README review (Ahad).** Written by Murad session 16 — it's a "both"
    task per PLAN.md §5. Worth reading before Phase 7 closes, even if no
    changes come out of it.
-4. Once 1-3 are done, flip to Phase 8 (screen capture, LinkedIn post, Upwork
+2. Once 1 is done, flip to Phase 8 (screen capture, LinkedIn post, Upwork
    portfolio entry, repo public) — hard 21-day cap, don't start Phase 8 work
    early.
 
@@ -1536,3 +1593,5 @@ Housekeeping carried forward, not blocking Phase 7:
 | 2026-07-25 | `docs/INSTALL.md` wipe-test split across two sessions instead of one person completing all 8 steps | Steps 1-3/6 are mechanically scriptable (docker, schema load, workflow import via API) and don't touch real secrets. Steps 4/5/7/8 need real Stripe/HubSpot/Google/Slack accounts and manual UI credential entry — fabricating or guessing at that isn't a real test, and pasting real secrets into an agent session isn't something to do casually. Verified what could be verified without secrets, logged exactly what's left, handed to Murad rather than blocking Phase 7 close indefinitely or faking completeness. |
 | 2026-07-25 | Deleted all 6 stale/duplicate workflows from the live n8n instance rather than trying to identify and keep one | None of the 6 matched the workflow ID `progress.md` had recorded, and the closest candidate (`Reconciliation-Bot-Final`) was itself stale against the committed `workflow.json` — cheaper and safer to reimport a known-clean file than to reconcile or patch a canvas that had already drifted in an undiagnosed way. Consistent with the existing "always delete before reimport" rule (2026-07-20), just applied to a messier starting state than usual. |
 | 2026-07-25 | Live testing this session went through the browser UI (Claude in Chrome), not the n8n REST API | Discovered the public API has no manual-execute endpoint (only `activate`/`deactivate`/retry-existing) — a genuine platform constraint, not a workaround avoided out of laziness. Every prior session's "live" verification claims in this file almost certainly went through the UI the same way; noting it here so nobody assumes `curl` can drive a one-off test run in future sessions. |
+| 2026-07-28 | Patched one node's stale credential binding via a direct API `PUT` instead of sending the user back into the n8n UI | Only one node (`Get a contact`) out of eight credentialed nodes was missed in the manual re-selection pass — a single-field JSON patch on the workflow's `credentials` object is lower-risk and faster than a second UI round-trip, and doesn't change what's being tested (the doc's step-6 claim is about the import behavior itself, already reproduced correctly on the other seven nodes). |
+| 2026-07-28 | Ran `teardown.py` + `seed.py` + `teardown.py` again against the real shared Stripe/HubSpot test accounts to finish the wipe-test's step 8, rather than skipping the seeder | Same real test sandbox used by the live project — leftover tagged data from an earlier session was already present, confirming the known "Stripe charges never delete" constraint still holds. Asked the user before running teardown (destructive/refunding real data) rather than assuming; ran the full clean-seed-clean cycle so the doc's own "run teardown.py afterward" instruction was actually followed, leaving the shared accounts in the same state they'd be in for anyone else's next session. |
